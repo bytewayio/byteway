@@ -18,7 +18,7 @@ type member struct {
 }
 
 func TestDbUsage(t *testing.T) {
-	testDbFile, err := ioutil.TempFile(os.TempDir(), "cytest*.db")
+	testDbFile, err := ioutil.TempFile(os.TempDir(), "cytest")
 	if err != nil {
 		t.Error("failed to create test db file", err)
 		return
