@@ -1,4 +1,4 @@
-module github.com/bytewayio/byteway
+module github.com/bytewayio/byteway/cypress
 
 go 1.12
 
