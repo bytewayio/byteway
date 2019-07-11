@@ -50,7 +50,7 @@ func (w *traceableResponseWriter) Header() http.Header {
 
 func (w *traceableResponseWriter) Write(data []byte) (int, error) {
 	if data != nil {
-		w.contentLength = len(data)
+		w.contentLength += len(data)
 	}
 
 	return w.writer.Write(data)
@@ -161,7 +161,7 @@ func LoggingHandler(handler http.Handler) http.Handler {
 			contentLength: 0,
 			writer:        writer,
 		}
-		newRequest := request.WithContext(extentContext(request.Context()).withValue(TraceActivityIDKey, activityID))
+		newRequest := request.WithContext(extendContext(request.Context()).withValue(TraceActivityIDKey, activityID))
 		handler.ServeHTTP(tw, newRequest)
 
 		elapsed := time.Since(timeNow)

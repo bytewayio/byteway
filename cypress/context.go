@@ -19,7 +19,7 @@ type multiValueCtx struct {
 	parent context.Context
 }
 
-func extentContext(ctx context.Context) *multiValueCtx {
+func extendContext(ctx context.Context) *multiValueCtx {
 	if ctx == nil {
 		panic("source context cannot be nil")
 	}
