@@ -1,6 +1,7 @@
 package cypress
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -127,6 +128,7 @@ type WebServer struct {
 	captchaDigits      int
 	captchaWidth       int
 	captchaHeight      int
+	requestTimeout     int
 }
 
 // SendError complete the request by sending an error message to the client
@@ -269,6 +271,7 @@ func NewWebServer(listenAddr string, skinMgr *SkinManager) *WebServer {
 		captchaDigits:      6,
 		captchaWidth:       captcha.StdWidth,
 		captchaHeight:      captcha.StdHeight,
+		requestTimeout:     0,
 	}
 }
 
@@ -292,6 +295,11 @@ func (server *WebServer) WithCaptchaCustom(path string, digits, width, height in
 	server.captchaHeight = height
 	server.router.HandleFunc(path, server.createCaptcha)
 	return server
+}
+
+// WithRequestTimeout set request timeout in seconds for each individual requests
+func (server *WebServer) WithRequestTimeout(timeout int) {
+	server.requestTimeout = timeout
 }
 
 // WithCaptcha setup a captcha generator at the given "path" in a 240 x 80 image with six digits chanllege
@@ -393,6 +401,16 @@ func (server *WebServer) Start() error {
 	}
 
 	handler = NewSessionHandler(handler, server.sessionStore, server.sessionTimeout)
+	if server.requestTimeout > 0 {
+		nextHandler := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			ctx, cancelFunc := context.WithTimeout(req.Context(), time.Second*time.Duration(server.requestTimeout))
+			defer cancelFunc()
+			newReq := req.WithContext(ctx)
+			nextHandler.ServeHTTP(w, newReq)
+		})
+	}
+
 	handler = LoggingHandler(handler)
 	handler = handlers.ProxyHeaders(handler)
 	http.Handle("/", handler)

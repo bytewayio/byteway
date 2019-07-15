@@ -131,6 +131,7 @@ func LoggingHandler(handler http.Handler) http.Handler {
 					zap.String("requestMethod", request.Method),
 					zap.Stack("source"),
 					zap.String("activityId", GetTraceID(request.Context())))
+				SendError(writer, 500, "unexpected server error")
 			}
 		}()
 

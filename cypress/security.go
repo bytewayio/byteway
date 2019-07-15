@@ -131,7 +131,7 @@ func (handler *SecurityHandler) ServeHTTP(writer http.ResponseWriter, request *h
 	}
 
 	if userPrincipal != nil {
-		request.Context().(*multiValueCtx).withValue(UserPrincipalKey, userPrincipal)
+		request.Context().Value(multiValueContextKey).(*multiValueCtx).withValue(UserPrincipalKey, userPrincipal)
 	}
 
 	if userPrincipal != nil && handler.authzMgr.CheckAccess(userPrincipal, request.Method, request.URL.Path) {

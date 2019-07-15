@@ -1,6 +1,7 @@
 package cypress
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,6 +102,26 @@ func testActions(t *testing.T) []Action {
 			}),
 		},
 		Action{
+			Name: "timeout",
+			Handler: ActionHandler(func(r *http.Request, response *Response) {
+				var requestDone uint32
+				select {
+				case <-r.Context().Done():
+					if r.Context().Err() == context.DeadlineExceeded {
+						if atomic.CompareAndSwapUint32(&requestDone, 0, 1) {
+							response.DoneWithError(500, "server timeout")
+						}
+					}
+					break
+				case <-time.After(time.Second * 3):
+					if atomic.CompareAndSwapUint32(&requestDone, 0, 1) {
+						response.DoneWithContent(200, "text/plain", []byte("ok"))
+					}
+					break
+				}
+			}),
+		},
+		Action{
 			Name: "panic",
 			Handler: ActionHandler(func(r *http.Request, response *Response) {
 				panic("ask for panic")
@@ -137,6 +159,12 @@ func printSessionIDEx(handler http.Handler) http.Handler {
 		fmt.Println("printSessionIDEx:", traceID, session.ID)
 		handler.ServeHTTP(writer, request)
 	})
+}
+
+func DumpBufferWriter(t *testing.T, writer *BufferedWriter) {
+	for _, buf := range writer.Buffer {
+		t.Log(string(buf))
+	}
 }
 
 func TestWebServer(t *testing.T) {
@@ -183,6 +211,7 @@ func TestWebServer(t *testing.T) {
 
 	server.AddUserProvider(&TestUserProvider{})
 	server.WithSessionOptions(sessionStore, 15*time.Minute)
+	server.WithRequestTimeout(2)
 	server.WithStandardRouting("/web")
 	server.WithCaptcha("/captcha")
 	server.AddWsEndoint("/ws/echo", &TestWsListener{})
@@ -205,11 +234,13 @@ func TestWebServer(t *testing.T) {
 	resp, err := http.Get("http://localhost:8099/web/test/greeting?ticket=test")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusAccepted {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -217,12 +248,27 @@ func TestWebServer(t *testing.T) {
 	if err != nil {
 		resp.Body.Close()
 		t.Error("failed to read body", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	resp.Body.Close()
 	if "<h1>Hello, /web/test/greeting?ticket=test</h1>" != string(body) {
 		t.Error("unexpected response", string(body))
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	resp, err = http.Get("http://localhost:8099/web/test/timeout")
+	if err != nil {
+		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -243,8 +289,9 @@ func TestWebServer(t *testing.T) {
 		StatusCode int    `json:"responseStatus"`
 	}
 
-	if len(writer.Buffer) != 5 {
-		t.Error("expecting 5 log items but got", len(writer.Buffer))
+	if len(writer.Buffer) != 7 {
+		t.Error("expecting 7 log items but got", len(writer.Buffer))
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -253,49 +300,59 @@ func TestWebServer(t *testing.T) {
 	err = json.Unmarshal(writer.Buffer[3], &log1)
 	if err != nil {
 		t.Error("bad log item", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if "test" != log1.Controller {
 		t.Error("expecting test but got", log1.Controller)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if "greeting" != log1.Action {
 		t.Error("expecting greeting but got", log1.Action)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	err = json.Unmarshal(writer.Buffer[4], &log2)
+	DumpBufferWriter(t, writer)
 
 	if err != nil {
 		t.Error("bad log item", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if "/web/test/greeting" != log2.Path {
 		t.Error("expecting /web/test/greeting but got", log2.Path)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if 202 != log2.StatusCode {
 		t.Error("expecting 202 but got", log2.StatusCode)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if log1.TraceID != log2.TraceID {
 		t.Error(log1.TraceID, log2.TraceID, "expecting to be matched")
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	resp, err = http.Get("http://localhost:8099/web/test1/action1")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -303,23 +360,27 @@ func TestWebServer(t *testing.T) {
 	if err != nil {
 		resp.Body.Close()
 		t.Error("failed to read body", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	resp.Body.Close()
 	if "action1" != string(body) {
 		t.Error("unexpected response", string(body))
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	resp, err = http.Get("http://localhost:8099/web/test1/action2")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -328,11 +389,13 @@ func TestWebServer(t *testing.T) {
 	resp, err = http.Get("http://localhost:8099/web/test/index")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -340,22 +403,26 @@ func TestWebServer(t *testing.T) {
 	body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Error("failed to read body")
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if "Page TitlePage Content2" != string(body) {
 		t.Error("unexpected response body", string(body))
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	resp, err = http.Get("http://localhost:8099/captcha?sessid=abc123")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -368,11 +435,13 @@ func TestWebServer(t *testing.T) {
 	resp, err = http.Get("http://localhost:8099/captcha")
 	if err != nil {
 		t.Error("server is not started or working properly", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		t.Error("Unexpected http status", resp.Status)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -382,6 +451,7 @@ func TestWebServer(t *testing.T) {
 	c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8099/ws/echo", nil)
 	if err != nil {
 		t.Error("dial:", err)
+		DumpBufferWriter(t, writer)
 		return
 	}
 
@@ -390,5 +460,6 @@ func TestWebServer(t *testing.T) {
 	msgType, msg, err := c.ReadMessage()
 	if msgType != websocket.TextMessage || err != nil || string(msg) != "Hello, websocket!" {
 		t.Error("failed to read back the message")
+		DumpBufferWriter(t, writer)
 	}
 }

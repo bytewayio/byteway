@@ -79,7 +79,7 @@ func testSessionStore(sessionStore SessionStore, t *testing.T) {
 		return
 	}
 
-	err := sessionStore.Save(session, time.Millisecond*50)
+	err := sessionStore.Save(session, time.Second)
 	if err != nil {
 		t.Error("failed to save session", err)
 		return
@@ -102,7 +102,7 @@ func testSessionStore(sessionStore SessionStore, t *testing.T) {
 		return
 	}
 
-	time.Sleep(time.Millisecond * 51)
+	time.Sleep(time.Second + time.Millisecond*100)
 	_, err = sessionStore.Get(session.ID)
 	if err != ErrSessionNotFound {
 		t.Error("session must not be returned")
