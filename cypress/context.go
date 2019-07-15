@@ -6,11 +6,12 @@ import (
 	"time"
 )
 
-// TraceActivityIDKey context key for trace activity id
+// Context keys
 const (
-	TraceActivityIDKey = "TraceActivityID"
-	UserPrincipalKey   = "UserPrincipal"
-	SessionKey         = "UserSession"
+	TraceActivityIDKey   = "TraceActivityID"
+	UserPrincipalKey     = "UserPrincipal"
+	SessionKey           = "UserSession"
+	multiValueContextKey = "_multiValueContext"
 )
 
 type multiValueCtx struct {
@@ -24,11 +25,14 @@ func extendContext(ctx context.Context) *multiValueCtx {
 		panic("source context cannot be nil")
 	}
 
-	return &multiValueCtx{
+	newContext := &multiValueCtx{
 		lock:   &sync.RWMutex{},
 		values: make(map[string]interface{}),
 		parent: ctx,
 	}
+
+	newContext.withValue(multiValueContextKey, newContext)
+	return newContext
 }
 
 // Deadline deadline of the context

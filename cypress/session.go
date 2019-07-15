@@ -178,7 +178,7 @@ func (handler *sessionHandler) ServeHTTP(writer http.ResponseWriter, request *ht
 		http.SetCookie(writer, cookie)
 	}
 
-	request.Context().(*multiValueCtx).withValue(SessionKey, session)
+	request.Context().Value(multiValueContextKey).(*multiValueCtx).withValue(SessionKey, session)
 	defer func() {
 		if session.NeedSave() {
 			saveError := handler.store.Save(session, handler.timeout)
