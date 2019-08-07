@@ -1,6 +1,7 @@
 package cypress
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -17,17 +18,17 @@ func TestZkLockRelease(t *testing.T) {
 		return
 	}
 
-	_, err = conn.Create("/locks", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/locks1", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks", 0)
+	defer conn.Delete("/locks1", 0)
 
-	lock := NewZkLock(conn, "/locks/test1")
-	err = lock.Lock()
+	lock := NewZkLock(conn, "/locks1/test1")
+	err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
@@ -36,7 +37,7 @@ func TestZkLockRelease(t *testing.T) {
 
 	lock.Release()
 
-	err = lock.Lock()
+	err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
@@ -44,6 +45,93 @@ func TestZkLockRelease(t *testing.T) {
 	}
 
 	lock.Release()
+}
+
+func TestZkLockWithCancelledByTimeout(t *testing.T) {
+	writer := NewBufferWriter()
+	SetupLogger(LogLevelDebug, writer)
+
+	conn, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
+	if err != nil {
+		t.Error("not able to connect to local server", err)
+		return
+	}
+
+	conn1, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
+	if err != nil {
+		t.Error("not able to connect to local server", err)
+		return
+	}
+
+	_, err = conn.Create("/locks2", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	if err != nil {
+		t.Error("not able to create lock root", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks2", 0)
+
+	lock1 := NewZkLock(conn, "/locks2/test2")
+	lock2 := NewZkLock(conn1, "/locks2/test2")
+	ch := make(chan int, 1)
+	go func() {
+		lock1.Lock(context.Background())
+		defer lock1.Release()
+		ch <- 1
+		time.Sleep(time.Second * 2)
+	}()
+
+	// wait for the lock to be acquired
+	<-ch
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFunc()
+	err = lock2.Lock(ctx)
+	if err != ErrLockCancelled {
+		t.Error("lock expected to be failed with ErrLockCancelled", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	err = lock2.Lock(context.Background())
+	if err != nil {
+		t.Error("failed to lock with background context", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	lock2.Release()
+}
+
+func TestZkLockCancelled(t *testing.T) {
+	writer := NewBufferWriter()
+	SetupLogger(LogLevelDebug, writer)
+
+	conn, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
+	if err != nil {
+		t.Error("not able to connect to local server", err)
+		return
+	}
+
+	_, err = conn.Create("/locks3", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	if err != nil {
+		t.Error("not able to create lock root", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks3", 0)
+
+	lock := NewZkLock(conn, "/locks3/test3")
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	cancelFunc()
+	err = lock.Lock(ctx)
+	if err != ErrLockCancelled {
+		t.Error("lock expected to be failed with ErrLockCancelled", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
 }
 
 func TestZkLockWithContention(t *testing.T) {
@@ -62,23 +150,23 @@ func TestZkLockWithContention(t *testing.T) {
 		return
 	}
 
-	_, err = conn.Create("/locks", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/locks4", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks", 0)
+	defer conn.Delete("/locks4", 0)
 
-	lock1 := NewZkLock(conn, "/locks/test2")
-	lock2 := NewZkLock(conn1, "/locks/test2")
+	lock1 := NewZkLock(conn, "/locks4/test4")
+	lock2 := NewZkLock(conn1, "/locks4/test4")
 	counter := 0
 	ch := make(chan int32, 1)
 	proc := func(lock *ZkLock) {
 		for i := 0; i < 100; i++ {
 			func() {
-				e1 := lock.Lock()
+				e1 := lock.Lock(context.Background())
 				if e1 != nil {
 					t.Error("failed to lock with contention", e1)
 					DumpBufferWriter(t, writer)

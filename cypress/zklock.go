@@ -1,6 +1,7 @@
 package cypress
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 
@@ -24,6 +25,9 @@ var (
 
 	// ErrLockFailed failed to lock
 	ErrLockFailed = errors.New("failed to lock")
+
+	// ErrLockCancelled not able to acquire the lock before context has cancelled
+	ErrLockCancelled = errors.New("context cancelled before lock is acquired")
 )
 
 // ZkConn zookeeper connection
@@ -47,14 +51,29 @@ func NewZkLock(conn *zk.Conn, path string) *ZkLock {
 }
 
 // Lock lock or return error if not able to lock
-func (lock *ZkLock) Lock() error {
+func (lock *ZkLock) Lock(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&lock.state, stateUnlocked, statePendingLock) {
 		return ErrLockPending
 	}
 
 	// ensure we reset pending lock to unlocked in case of lock failed
 	defer atomic.CompareAndSwapInt32(&lock.state, statePendingLock, stateUnlocked)
-	for {
+	var cancelled int32
+	ch := make(chan int32, 1)
+	defer func() {
+		ch <- 1
+	}()
+	go func() {
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled {
+				atomic.StoreInt32(&cancelled, 1)
+			}
+		case <-ch:
+			break
+		}
+	}()
+	for atomic.LoadInt32(&cancelled) == 0 {
 		exists, _, ch, err := lock.conn.ExistsW(lock.path)
 		if err != nil {
 			zap.L().Error("failed to check node", zap.String("path", lock.path), zap.Error(err))
@@ -99,9 +118,18 @@ func (lock *ZkLock) Lock() error {
 		}
 	}
 
+	if atomic.LoadInt32(&cancelled) == 1 {
+		if atomic.LoadInt32(&lock.state) == stateLocked {
+			lock.Release()
+		}
+
+		return ErrLockCancelled
+	}
+
 	return nil
 }
 
+// Release release the lock, ignore all errors
 func (lock *ZkLock) Release() {
 	err := lock.conn.Delete(lock.path, 0)
 	if err != nil {
