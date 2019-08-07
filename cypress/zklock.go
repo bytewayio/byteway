@@ -60,9 +60,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 	defer atomic.CompareAndSwapInt32(&lock.state, statePendingLock, stateUnlocked)
 	var cancelled int32
 	ch := make(chan int32, 1)
-	defer func() {
-		ch <- 1
-	}()
+	defer close(ch)
 	go func() {
 		select {
 		case <-ctx.Done():
