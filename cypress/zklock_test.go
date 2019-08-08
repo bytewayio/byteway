@@ -18,6 +18,7 @@ func TestZkLockRelease(t *testing.T) {
 		return
 	}
 
+	defer conn.Close()
 	_, err = conn.Create("/locks1", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		t.Error("not able to create lock root", err)
@@ -57,11 +58,15 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 		return
 	}
 
+	defer conn.Close()
+
 	conn1, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
 	if err != nil {
 		t.Error("not able to connect to local server", err)
 		return
 	}
+
+	defer conn1.Close()
 
 	_, err = conn.Create("/locks2", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
@@ -113,6 +118,8 @@ func TestZkLockCancelled(t *testing.T) {
 		return
 	}
 
+	defer conn.Close()
+
 	_, err = conn.Create("/locks3", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		t.Error("not able to create lock root", err)
@@ -144,11 +151,15 @@ func TestZkLockWithContention(t *testing.T) {
 		return
 	}
 
+	defer conn.Close()
+
 	conn1, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
 	if err != nil {
 		t.Error("not able to connect to local server", err)
 		return
 	}
+
+	defer conn1.Close()
 
 	_, err = conn.Create("/locks4", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil {
