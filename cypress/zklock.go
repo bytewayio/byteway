@@ -59,15 +59,16 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 	// ensure we reset pending lock to unlocked in case of lock failed
 	defer atomic.CompareAndSwapInt32(&lock.state, statePendingLock, stateUnlocked)
 	var cancelled int32
-	ch := make(chan int32, 1)
-	defer close(ch)
+	cancelChannel := make(chan int32, 1)
+	defer close(cancelChannel)
 	go func() {
 		select {
 		case <-ctx.Done():
 			if ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled {
 				atomic.StoreInt32(&cancelled, 1)
+				cancelChannel <- 1
 			}
-		case <-ch:
+		case <-cancelChannel:
 			break
 		}
 	}()
@@ -107,11 +108,16 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 				return ErrLockFailed
 			}
 		} else {
-			// wait for lock to be released
-			event := <-ch
-			if event.Type != zk.EventNodeDeleted {
-				zap.L().Error("unexpected event type", zap.String("path", lock.path), zap.Int32("type", int32(event.Type)))
-				return ErrLockFailed
+			// wait for lock to be released or cancel event
+			select {
+			case event := <-ch:
+				if event.Type != zk.EventNodeDeleted {
+					zap.L().Error("unexpected event type", zap.String("path", lock.path), zap.Int32("type", int32(event.Type)))
+					return ErrLockFailed
+				}
+				break
+			case <-cancelChannel:
+				break
 			}
 		}
 	}
