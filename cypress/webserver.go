@@ -371,6 +371,12 @@ func (server *WebServer) AddWsEndoint(endpoint string, listener WebSocketListene
 	return server
 }
 
+// AddWsHandler adds a web socket handler to server
+func (server *WebServer) AddWsHandler(endpoint string, handler *WebSocketHandler) *WebServer {
+	server.router.HandleFunc(endpoint, handler.Handle)
+	return server
+}
+
 // AddStaticResource adds a static resource folder to the server with the given prefix,
 // the prefix must be in format of "/prefix/"
 func (server *WebServer) AddStaticResource(prefix, dir string) *WebServer {

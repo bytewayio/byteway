@@ -65,10 +65,15 @@ type WebSocketHandler struct {
 	WriteTimeout     time.Duration
 	Listener         WebSocketListener
 	WriteCompression bool
+	CheckOrigin      func(*http.Request) bool
 }
 
 // Handle handles the incomping web requests and try to upgrade the request into a websocket connection
 func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *http.Request) {
+	if handler.CheckOrigin != nil {
+		upgrader.CheckOrigin = handler.CheckOrigin
+	}
+
 	conn, err := upgrader.Upgrade(writer, request, nil)
 	if err != nil {
 		zap.L().Error("failed to upgrade the incoming connection to a websocket", zap.Error(err))
