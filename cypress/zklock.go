@@ -30,12 +30,6 @@ var (
 	ErrLockCancelled = errors.New("context cancelled before lock is acquired")
 )
 
-// ZkConn zookeeper connection
-type ZkConn struct {
-	Conn   *zk.Conn
-	EvChan <-chan zk.Event
-}
-
 // ZkLock zookeeper based distributed lock
 type ZkLock struct {
 	conn  *zk.Conn
