@@ -2,6 +2,7 @@ package cypress
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -385,9 +386,15 @@ func (server *WebServer) AddStaticResource(prefix, dir string) *WebServer {
 }
 
 // WithSessionOptions setup the session options including the session store and session timeout interval
-func (server *WebServer) WithSessionOptions(store SessionStore, timeout time.Duration) *WebServer {
+func (server *WebServer) WithSessionOptions(store SessionStore, timeout time.Duration, valueTypes ...interface{}) *WebServer {
 	server.sessionStore = store
 	server.sessionTimeout = timeout
+	if valueTypes != nil {
+		for _, valueType := range valueTypes {
+			gob.Register(valueType)
+		}
+	}
+
 	return server
 }
 
