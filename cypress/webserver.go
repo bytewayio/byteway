@@ -192,9 +192,9 @@ func (r *Response) SetStatus(statusCode int) {
 	r.writer.WriteHeader(statusCode)
 }
 
-// Write writes content to response
-func (r *Response) Write(content []byte) {
-	r.writer.Write(content)
+// Write writes content to response, compatible with writer
+func (r *Response) Write(content []byte) (int, error) {
+	return r.writer.Write(content)
 }
 
 // SetNoCache sets headers for the client not to cache the response
