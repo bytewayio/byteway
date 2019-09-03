@@ -69,7 +69,7 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 	defer conn1.Close()
 
 	_, err = conn.Create("/locks2", []byte{}, 0, zk.WorldACL(zk.PermAll))
-	if err != nil {
+	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return

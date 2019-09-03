@@ -3,6 +3,7 @@ package cypress
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	"github.com/samuel/go-zookeeper/zk"
@@ -10,19 +11,12 @@ import (
 )
 
 const (
-	stateUnlocked    = 0
-	statePendingLock = 1
-	stateLocked      = 2
-
 	eventCreated = 0
 	eventDeleted = 1
 	eventExit    = 2
 )
 
 var (
-	// ErrLockPending lock is pending
-	ErrLockPending = errors.New("lock is pending")
-
 	// ErrLockFailed failed to lock
 	ErrLockFailed = errors.New("failed to lock")
 
@@ -32,26 +26,33 @@ var (
 
 // ZkLock zookeeper based distributed lock
 type ZkLock struct {
-	conn  *zk.Conn
-	path  string
-	state int32
+	conn      *zk.Conn
+	path      string
+	localLock *sync.Mutex
+	acquired  bool
 }
 
 // NewZkLock creates a new ZkLock on the given path
 func NewZkLock(conn *zk.Conn, path string) *ZkLock {
 	return &ZkLock{
-		conn, path, stateUnlocked,
+		conn, path, &sync.Mutex{}, false,
 	}
 }
 
 // Lock lock or return error if not able to lock
 func (lock *ZkLock) Lock(ctx context.Context) error {
-	if !atomic.CompareAndSwapInt32(&lock.state, stateUnlocked, statePendingLock) {
-		return ErrLockPending
+	lock.localLock.Lock()
+	unlockLocal := true
+	defer func() {
+		if unlockLocal {
+			lock.localLock.Unlock()
+		}
+	}()
+
+	if lock.acquired {
+		panic("bad zklock state")
 	}
 
-	// ensure we reset pending lock to unlocked in case of lock failed
-	defer atomic.CompareAndSwapInt32(&lock.state, statePendingLock, stateUnlocked)
 	var cancelled int32
 	cancelChannel := make(chan int32, 1)
 	defer close(cancelChannel)
@@ -83,12 +84,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 					return ErrLockFailed
 				}
 
-				if !atomic.CompareAndSwapInt32(&lock.state, statePendingLock, stateLocked) {
-					zap.L().Error("unexpected lock state, pendingLock is expected", zap.String("path", lock.path), zap.Int32("state", lock.state))
-					return ErrLockFailed
-				}
-
-				// exit for
+				lock.acquired = true
 				break
 			} else if err == zk.ErrNodeExists {
 				// lock has been placed by other process
@@ -116,8 +112,10 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 		}
 	}
 
+	// if lock is acquired, local lock will be unlocked in Release
+	unlockLocal = !lock.acquired
 	if atomic.LoadInt32(&cancelled) == 1 {
-		if atomic.LoadInt32(&lock.state) == stateLocked {
+		if lock.acquired {
 			lock.Release()
 		}
 
@@ -134,7 +132,6 @@ func (lock *ZkLock) Release() {
 		zap.L().Error("failed to delete lock node", zap.String("path", lock.path), zap.Error(err))
 	}
 
-	if !atomic.CompareAndSwapInt32(&lock.state, stateLocked, stateUnlocked) {
-		zap.L().Error("lock is not in locked state", zap.String("path", lock.path), zap.Int32("state", lock.state))
-	}
+	lock.acquired = false
+	lock.localLock.Unlock()
 }
