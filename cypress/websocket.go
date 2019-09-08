@@ -2,6 +2,7 @@ package cypress
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,15 +16,20 @@ type WebSocketSession struct {
 	Context      map[string]interface{}
 	connection   *websocket.Conn
 	writeTimeout time.Duration
+	lock         *sync.Mutex
 }
 
 // Close close the underlying connection of the WebSocketSession
 func (session *WebSocketSession) Close() error {
+	session.lock.Lock()
+	defer session.lock.Unlock()
 	return session.connection.Close()
 }
 
 // SendTextMessage sends a text message to the remote
 func (session *WebSocketSession) SendTextMessage(text string) error {
+	session.lock.Lock()
+	defer session.lock.Unlock()
 	if session.writeTimeout > time.Duration(0) {
 		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
 	}
@@ -33,6 +39,8 @@ func (session *WebSocketSession) SendTextMessage(text string) error {
 
 // SendBinaryMessage sends a binary message to the remote
 func (session *WebSocketSession) SendBinaryMessage(data []byte) error {
+	session.lock.Lock()
+	defer session.lock.Unlock()
 	if session.writeTimeout > time.Duration(0) {
 		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
 	}
@@ -116,7 +124,7 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 		conn.EnableWriteCompression(true)
 	}
 
-	webSocketSession := &WebSocketSession{userPrincipal, session, make(map[string]interface{}), conn, handler.WriteTimeout}
+	webSocketSession := &WebSocketSession{userPrincipal, session, make(map[string]interface{}), conn, handler.WriteTimeout, &sync.Mutex{}}
 	handler.Listener.OnConnect(webSocketSession)
 	go handler.connectionLoop(webSocketSession)
 }
