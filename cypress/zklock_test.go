@@ -200,3 +200,54 @@ func TestZkLockWithContention(t *testing.T) {
 		return
 	}
 }
+
+func TestZkLockWithSameInstanceContention(t *testing.T) {
+	writer := NewBufferWriter()
+	SetupLogger(LogLevelDebug, writer)
+
+	conn, _, err := zk.Connect([]string{"localhost:2181"}, time.Second*10)
+	if err != nil {
+		t.Error("not able to connect to local server", err)
+		return
+	}
+
+	defer conn.Close()
+
+	_, err = conn.Create("/locks5", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	if err != nil {
+		t.Error("not able to create lock root", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks5", 0)
+
+	lock := NewZkLock(conn, "/locks5/test5")
+	counter := 0
+	ch := make(chan int32, 1)
+	proc := func(lock *ZkLock) {
+		for i := 0; i < 100; i++ {
+			func() {
+				e1 := lock.Lock(context.Background())
+				if e1 != nil {
+					t.Error("failed to lock with contention", e1)
+					DumpBufferWriter(t, writer)
+					return
+				}
+				defer lock.Release()
+				counter++
+			}()
+		}
+
+		ch <- 1
+	}
+	go proc(lock)
+	go proc(lock)
+	<-ch
+	<-ch
+	if counter != 200 {
+		t.Error("counter is not increased atomically, expected 200, actuall ", counter)
+		DumpBufferWriter(t, writer)
+		return
+	}
+}
