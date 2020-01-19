@@ -3,6 +3,7 @@ package cypress
 import (
 	"context"
 	"database/sql"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -117,4 +118,272 @@ func QueryAll(ctx context.Context, queryable Queryable, mapper RowMapper, query 
 	}
 
 	return results, nil
+}
+
+// Txn an abstraction for db transaction as well as cluster based db transaction
+type Txn interface {
+	Insert(entity interface{}) (sql.Result, error)
+
+	Update(entity interface{}) (sql.Result, error)
+
+	Delete(entity interface{}) (sql.Result, error)
+
+	Execute(sql string, args ...interface{}) (sql.Result, error)
+
+	GetOne(proto interface{}, id interface{}) (interface{}, error)
+
+	QueryOne(sql string, mapper RowMapper, args ...interface{}) (interface{}, error)
+
+	QueryAll(sql string, mapper RowMapper, args ...interface{}) ([]interface{}, error)
+}
+
+// DbTxn db transaction wrapper with context
+type DbTxn struct {
+	conn   *sql.Conn
+	tx     *sql.Tx
+	ctx    context.Context
+	commit bool
+}
+
+// implement Txn for DbTxn
+
+// Insert insert entity to db
+func (txn *DbTxn) Insert(entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(txn.ctx, "Insert"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		r, err = txn.tx.ExecContext(txn.ctx, ed.InsertSQL, ed.GetInsertValues(entity)...)
+		return err
+	})
+
+	return r, err
+}
+
+// Update update entity with db
+func (txn *DbTxn) Update(entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(txn.ctx, "Update"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		args := ed.GetUpdateValues(entity)
+		args = append(args, ed.GetKeyValue(entity))
+		r, err = txn.tx.ExecContext(txn.ctx, ed.UpdateSQL, args...)
+		return err
+	})
+
+	return r, err
+}
+
+// Delete delete entity from db
+func (txn *DbTxn) Delete(entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(txn.ctx, "Delete"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		r, err = txn.tx.ExecContext(txn.ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
+		return err
+	})
+
+	return r, err
+}
+
+// Execute execute command towards db
+func (txn *DbTxn) Execute(command string, args ...interface{}) (sql.Result, error) {
+	var r sql.Result
+	var err error
+	LogOperation(txn.ctx, "ExecuteCommand", func() error {
+		r, err = txn.tx.ExecContext(txn.ctx, command, args...)
+		return err
+	})
+
+	return r, err
+}
+
+// GetOne query one entity based on the prototype
+func (txn *DbTxn) GetOne(proto interface{}, id interface{}) (interface{}, error) {
+	ty := reflect.TypeOf(proto)
+	mapper := NewSmartMapper(proto)
+	var result interface{}
+	var err error
+	LogOperation(txn.ctx, "GetOne"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(ty)
+		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, id)
+		return err
+	})
+
+	return result, err
+}
+
+// QueryOne execute sql query and return one entity based on the mapper
+func (txn *DbTxn) QueryOne(query string, mapper RowMapper, args ...interface{}) (interface{}, error) {
+	var result interface{}
+	var err error
+	LogOperation(txn.ctx, "QueryOne", func() error {
+		result, err = QueryOne(txn.ctx, txn.tx, mapper, query, args...)
+		return err
+	})
+
+	return result, err
+}
+
+// QueryAll execute sql query and return all entities based on the mapper
+func (txn *DbTxn) QueryAll(query string, mapper RowMapper, args ...interface{}) ([]interface{}, error) {
+	var result []interface{}
+	var err error
+	LogOperation(txn.ctx, "QueryAll", func() error {
+		result, err = QueryAll(txn.ctx, txn.tx, mapper, query, args...)
+		return err
+	})
+
+	return result, err
+}
+
+// Close commit or rollback transaction and close conn
+func (txn *DbTxn) Close() {
+	if txn.commit {
+		err := txn.tx.Commit()
+		if err != nil {
+			zap.L().Error("failed to commit transaction", zap.Error(err))
+		}
+	} else {
+		err := txn.tx.Rollback()
+		if err != nil {
+			zap.L().Error("failed to rollback transaction", zap.Error(err))
+		}
+	}
+
+	err := txn.conn.Close()
+	if err != nil {
+		zap.L().Error("failed to close underlying conn", zap.Error(err))
+	}
+}
+
+// DbAccessor database accessor
+type DbAccessor struct {
+	db *sql.DB
+}
+
+// Insert insert entity to db
+func (accessor *DbAccessor) Insert(ctx context.Context, entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(ctx, "Insert"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		r, err = accessor.db.ExecContext(ctx, ed.InsertSQL, ed.GetInsertValues(entity)...)
+		return err
+	})
+
+	return r, err
+}
+
+// Update update entity with db
+func (accessor *DbAccessor) Update(ctx context.Context, entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(ctx, "Update"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		args := ed.GetUpdateValues(entity)
+		args = append(args, ed.GetKeyValue(entity))
+		r, err = accessor.db.ExecContext(ctx, ed.UpdateSQL, args...)
+		return err
+	})
+
+	return r, err
+}
+
+// Delete delete entity from db
+func (accessor *DbAccessor) Delete(ctx context.Context, entity interface{}) (sql.Result, error) {
+	ty := reflect.TypeOf(entity)
+	var r sql.Result
+	var err error
+	LogOperation(ctx, "Delete"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+		r, err = accessor.db.ExecContext(ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
+		return err
+	})
+
+	return r, err
+}
+
+// Execute execute command towards db
+func (accessor *DbAccessor) Execute(ctx context.Context, command string, args ...interface{}) (sql.Result, error) {
+	var r sql.Result
+	var err error
+	LogOperation(ctx, "ExecuteCommand", func() error {
+		r, err = accessor.db.ExecContext(ctx, command, args...)
+		return err
+	})
+
+	return r, err
+}
+
+// GetOne query one entity based on the prototype
+func (accessor *DbAccessor) GetOne(ctx context.Context, proto interface{}, id interface{}) (interface{}, error) {
+	ty := reflect.TypeOf(proto)
+	mapper := NewSmartMapper(proto)
+	var result interface{}
+	var err error
+	LogOperation(ctx, "GetOne"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(ty)
+		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, id)
+		return err
+	})
+
+	return result, err
+}
+
+// QueryOne execute sql query and return one entity based on the mapper
+func (accessor *DbAccessor) QueryOne(ctx context.Context, query string, mapper RowMapper, args ...interface{}) (interface{}, error) {
+	var result interface{}
+	var err error
+	LogOperation(ctx, "QueryOne", func() error {
+		result, err = QueryOne(ctx, accessor.db, mapper, query, args...)
+		return err
+	})
+
+	return result, err
+}
+
+// QueryAll execute sql query and return all entities based on the mapper
+func (accessor *DbAccessor) QueryAll(ctx context.Context, query string, mapper RowMapper, args ...interface{}) ([]interface{}, error) {
+	var result []interface{}
+	var err error
+	LogOperation(ctx, "QueryAll", func() error {
+		result, err = QueryAll(ctx, accessor.db, mapper, query, args...)
+		return err
+	})
+
+	return result, err
+}
+
+// BeginTxnWithIsolation starts a new transaction
+func (accessor *DbAccessor) BeginTxnWithIsolation(ctx context.Context, isolation sql.IsolationLevel) (*DbTxn, error) {
+	conn, err := accessor.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{
+		Isolation: isolation,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &DbTxn{
+		conn: conn,
+		tx:   tx,
+		ctx:  ctx,
+	}, nil
+}
+
+// BeginTxn starts a new transaction with RepeatableRead isolation
+func (accessor *DbAccessor) BeginTxn(ctx context.Context) (*DbTxn, error) {
+	return accessor.BeginTxnWithIsolation(ctx, sql.LevelRepeatableRead)
 }

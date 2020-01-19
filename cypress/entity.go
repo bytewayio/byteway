@@ -43,6 +43,7 @@ type EntityDescriptor struct {
 	InsertSQL    string
 	UpdateSQL    string
 	DeleteSQL    string
+	GetOneSQL    string
 }
 
 func newEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
@@ -61,6 +62,10 @@ func (descriptor *EntityDescriptor) GetInsertValues(entity interface{}) []interf
 	}
 
 	value := reflect.ValueOf(entity)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+
 	result := make([]interface{}, len(descriptor.insertFields))
 	for index, field := range descriptor.insertFields {
 		result[index] = value.FieldByIndex(field.field.Index).Interface()
@@ -76,6 +81,10 @@ func (descriptor *EntityDescriptor) GetUpdateValues(entity interface{}) []interf
 	}
 
 	value := reflect.ValueOf(entity)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+
 	result := make([]interface{}, len(descriptor.updateFields))
 	for index, field := range descriptor.updateFields {
 		result[index] = value.FieldByIndex(field.field.Index).Interface()
@@ -94,7 +103,12 @@ func (descriptor *EntityDescriptor) GetKeyValue(entity interface{}) interface{} 
 		return nil
 	}
 
-	return reflect.ValueOf(entity).FieldByIndex(descriptor.key.field.field.Index).Interface()
+	value := reflect.ValueOf(entity)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
+	}
+
+	return value.FieldByIndex(descriptor.key.field.field.Index).Interface()
 }
 
 func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
@@ -181,6 +195,7 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 		}
 
 		descriptor.UpdateSQL += " where " + quoteIdentifier(descriptor.key.field.column) + "=?"
+		descriptor.GetOneSQL = "select * from " + quoteIdentifier(descriptor.tableName) + " where " + quoteIdentifier(descriptor.key.field.column) + "=?"
 	}
 
 	params := ""

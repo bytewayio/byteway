@@ -191,3 +191,25 @@ func LoggingHandler(handler http.Handler) http.Handler {
 
 	return http.HandlerFunc(handlerFunction)
 }
+
+// LogOperation emit latency and error (if any) for the given operation
+func LogOperation(ctx context.Context, operation string, operator func() error) error {
+	tsStart := time.Now()
+	err := operator()
+	timeElapsed := time.Since(tsStart)
+	activityID := GetTraceID(ctx)
+	if err == nil {
+		zap.L().Info("operationDone",
+			zap.String("op", operation),
+			zap.String("activityId", activityID),
+			zap.Int("latency", int(timeElapsed.Seconds()*1000)))
+	} else {
+		zap.L().Error("operationFailed",
+			zap.String("op", operation),
+			zap.String("activityId", activityID),
+			zap.Error(err),
+			zap.Int("latency", int(timeElapsed.Seconds()*1000)))
+	}
+
+	return err
+}
