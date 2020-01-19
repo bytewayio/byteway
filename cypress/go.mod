@@ -20,6 +20,7 @@ require (
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0
+	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )

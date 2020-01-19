@@ -3,10 +3,15 @@ package cypress
 import (
 	"context"
 	"database/sql"
+	"regexp"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
 
 // Queryable a queryable object that could be a Connection, DB or Tx
 type Queryable interface {
@@ -32,6 +37,26 @@ type RowMapperFunc func(row DataRow) (interface{}, error)
 // Map implements the RowMapper interface
 func (mapper RowMapperFunc) Map(row DataRow) (interface{}, error) {
 	return mapper(row)
+}
+
+// TableNameResolver resolves a struct name to table name
+type TableNameResolver interface {
+	Resolve(structName string) string
+}
+
+// TableNameResolverFunc a function that implements TableNameResolver
+type TableNameResolverFunc func(structName string) string
+
+// Resolve resolves struct name to table name
+func (resolver TableNameResolverFunc) Resolve(name string) string {
+	return resolver(name)
+}
+
+// ToSnakeCase maps CamelCase to SnakeCase
+func ToSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
 }
 
 // LogExec log the sql Exec call result
