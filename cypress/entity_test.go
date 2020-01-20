@@ -141,3 +141,175 @@ func TestEntityDescriptorWithQueries(t *testing.T) {
 		return
 	}
 }
+
+func TestDbAccessor(t *testing.T) {
+	testDbFile, err := ioutil.TempFile(os.TempDir(), "dbaccessortst")
+	if err != nil {
+		t.Error("failed to create test db file", err)
+		return
+	}
+
+	defer os.Remove(testDbFile.Name())
+
+	db, err := sql.Open("sqlite3", testDbFile.Name())
+	if err != nil {
+		t.Error("failed to open the database file", err)
+		return
+	}
+
+	defer db.Close()
+
+	_, err = db.Exec("create table test_entity(id int PRIMARY KEY, name varchar(100), last_update_ts int)")
+	if err != nil {
+		t.Error("failed to create test table", err)
+		return
+	}
+
+	entity := &testEntity{
+		ID:          200,
+		Name:        "DbAccessorTest",
+		LastUpdated: 2020,
+		Alias1:      "alias1",
+		Alias2:      "alias2",
+	}
+
+	accessor := NewDbAccessor(db)
+	_, err = accessor.Insert(context.Background(), entity)
+	if err != nil {
+		t.Error("failed to insert entity", err)
+		return
+	}
+
+	one, err := accessor.GetOne(context.Background(), entity, 200)
+	if err != nil {
+		t.Error("failed to get one from db", err)
+		return
+	}
+
+	if one == nil {
+		t.Error("unexpected nil returned")
+		return
+	}
+
+	entity1 := one.(*testEntity)
+	if entity1.LastUpdated != 2020 {
+		t.Error("unexpected last update value", entity1.LastUpdated)
+		return
+	}
+
+	entity.LastUpdated = 2022
+	result, err := accessor.Update(context.Background(), entity)
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected != 1 {
+		t.Error("unexpected rows affected", rowsAffected)
+		return
+	}
+}
+
+func TestDbAccessorTxn(t *testing.T) {
+	testDbFile, err := ioutil.TempFile(os.TempDir(), "dbtxntst")
+	if err != nil {
+		t.Error("failed to create test db file", err)
+		return
+	}
+
+	defer os.Remove(testDbFile.Name())
+
+	db, err := sql.Open("sqlite3", testDbFile.Name())
+	if err != nil {
+		t.Error("failed to open the database file", err)
+		return
+	}
+
+	defer db.Close()
+
+	_, err = db.Exec("create table test_entity(id int PRIMARY KEY, name varchar(100), last_update_ts int)")
+	if err != nil {
+		t.Error("failed to create test table", err)
+		return
+	}
+
+	accessor := NewDbAccessor(db)
+	failed := false
+	func() {
+		txn, err := accessor.BeginTxn(context.Background())
+		if err != nil {
+			t.Error("unexpected error for begin txn", err)
+			return
+		}
+
+		defer txn.Close()
+		entity := &testEntity{
+			ID:          200,
+			Name:        "DbAccessorTest",
+			LastUpdated: 2020,
+			Alias1:      "alias1",
+			Alias2:      "alias2",
+		}
+
+		_, err = txn.Insert(entity)
+		if err != nil {
+			t.Error("failed to insert due to error", err)
+			failed = true
+			return
+		}
+
+		txn.Rollback()
+	}()
+
+	if failed {
+		return
+	}
+
+	// last txn has rollbacked, so there is no entity with id 200
+	one, err := accessor.GetOne(context.Background(), &testEntity{}, 200)
+	if err != nil {
+		t.Error("failed to get one from db", err)
+		return
+	}
+
+	if one != nil {
+		t.Error("there should not be any instance with ID 200")
+		return
+	}
+
+	func() {
+		txn, err := accessor.BeginTxn(context.Background())
+		if err != nil {
+			t.Error("unexpected error for begin txn", err)
+			return
+		}
+
+		defer txn.Close()
+		entity := &testEntity{
+			ID:          200,
+			Name:        "DbAccessorTest",
+			LastUpdated: 2020,
+			Alias1:      "alias1",
+			Alias2:      "alias2",
+		}
+
+		_, err = txn.Insert(entity)
+		if err != nil {
+			t.Error("failed to insert due to error", err)
+			failed = true
+			return
+		}
+	}()
+
+	if failed {
+		return
+	}
+
+	// last txn has rollbacked, so there is no entity with id 200
+	one, err = accessor.GetOne(context.Background(), &testEntity{}, 200)
+	if err != nil {
+		t.Error("failed to get one from db", err)
+		return
+	}
+
+	if one == nil {
+		t.Error("transaction committed, there must be an instance with ID 200")
+		return
+	}
+}

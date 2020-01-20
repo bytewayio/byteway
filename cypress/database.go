@@ -242,6 +242,11 @@ func (txn *DbTxn) QueryAll(query string, mapper RowMapper, args ...interface{}) 
 	return result, err
 }
 
+// Rollback set to rollback the transaction at close
+func (txn *DbTxn) Rollback() {
+	txn.commit = false
+}
+
 // Close commit or rollback transaction and close conn
 func (txn *DbTxn) Close() {
 	if txn.commit {
@@ -265,6 +270,11 @@ func (txn *DbTxn) Close() {
 // DbAccessor database accessor
 type DbAccessor struct {
 	db *sql.DB
+}
+
+// NewDbAccessor create a new instance of data accessor for the given db
+func NewDbAccessor(db *sql.DB) *DbAccessor {
+	return &DbAccessor{db}
 }
 
 // Insert insert entity to db
@@ -377,9 +387,10 @@ func (accessor *DbAccessor) BeginTxnWithIsolation(ctx context.Context, isolation
 	}
 
 	return &DbTxn{
-		conn: conn,
-		tx:   tx,
-		ctx:  ctx,
+		conn:   conn,
+		tx:     tx,
+		ctx:    ctx,
+		commit: true,
 	}, nil
 }
 
