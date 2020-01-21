@@ -113,7 +113,7 @@ func (descriptor *EntityDescriptor) GetKeyValue(entity interface{}) interface{} 
 
 func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 	ty := entityType
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -219,8 +219,13 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 
 // GetOrCreateEntityDescriptor get or create EntityDescriptor for the given type
 func GetOrCreateEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
-	item := entityDescriptorsCache.GetOrCompute(entityType.PkgPath()+"/"+entityType.Name(), func() interface{} {
-		return createEntityDescriptor(entityType)
+	ty := entityType
+	for ty.Kind() == reflect.Ptr {
+		ty = entityType.Elem()
+	}
+
+	item := entityDescriptorsCache.GetOrCompute(entityType.PkgPath()+"/"+ty.Name(), func() interface{} {
+		return createEntityDescriptor(ty)
 	})
 
 	return item.(*EntityDescriptor)

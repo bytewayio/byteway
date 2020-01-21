@@ -2,11 +2,14 @@ package cypress
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"errors"
-	"golang.org/x/sync/semaphore"
+	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -123,7 +126,7 @@ func (pool *UniqueIDPool) NextID(ctx context.Context, partition int32) (int64, e
 }
 
 // UpdatePooledID update pooled id for the given partition
-func (pool *UniqueIDPool) UpdatePooledID(partition int, pooledID int64) error {
+func (pool *UniqueIDPool) UpdatePooledID(partition int32, pooledID int64) error {
 	if partition > PartitionKeyMask {
 		return ErrOutOfRange
 	}
@@ -134,5 +137,151 @@ func (pool *UniqueIDPool) UpdatePooledID(partition int, pooledID int64) error {
 
 // UniqueIDGenerator unique id generator interface
 type UniqueIDGenerator interface {
-	NextUniqueID(ctx context.Context, name string, partition int) (UniqueID, error)
+	NextUniqueID(ctx context.Context, name string, partition int32) (UniqueID, error)
+}
+
+// PooledID unique id pooled ID record, requires the following table
+/// create table `pooled_id` (
+/// `name` varchar(200) not null,
+/// `partition` int not null,
+/// `pooled_id` bigint not null,
+/// constraint `pk_id_generator` primary key (`name`, `partition`)
+/// );
+type PooledID struct {
+	Name      string `col:"name" dtags:"key,nogen"`
+	Partition int32  `col:"partition"`
+	PooledID  int64  `col:"pooled_id"`
+}
+
+var pooledIDPrototype = &PooledID{}
+
+// DbUniqueIDGenerator database based unique id generator
+type DbUniqueIDGenerator struct {
+	dbAccessor *DbAccessor
+	pools      *ConcurrentMap
+}
+
+// implement UniqueIDGenerator
+
+func isValidID(id int64) bool {
+	return (id & int64(PartitionKeyMask<<SegmentedIDBitWidth)) == 0
+}
+
+// NewDbUniqueIDGenerator creates a db based unique id generator
+func NewDbUniqueIDGenerator(db *sql.DB) *DbUniqueIDGenerator {
+	return &DbUniqueIDGenerator{
+		dbAccessor: NewDbAccessor(db),
+		pools:      NewConcurrentMapTypeEnforced(reflect.TypeOf(&UniqueIDPool{})),
+	}
+}
+
+type insertError struct {
+	err error
+}
+
+func (e *insertError) Error() string {
+	return e.err.Error()
+}
+
+func (e *insertError) Unwrap() error {
+	return e.err
+}
+
+// NextUniqueID generate a next unique id
+func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name string, partition int32) (UniqueID, error) {
+	var uniqueID UniqueID
+	err := LogOperation(ctx, "GenerateUniqueId", func() error {
+		pool := generator.pools.GetOrCompute(name, func() interface{} {
+			return NewUniqueIDPool()
+		}).(*UniqueIDPool)
+		id, err := pool.NextID(ctx, partition)
+		if err != nil {
+			return err
+		}
+
+		for !isValidID(id) {
+			retryLeft := 3
+			for retryLeft > 0 {
+				err = func() error {
+					pool.Lock.Lock()
+					defer pool.Lock.Unlock()
+					id, err = pool.NextID(ctx, partition)
+					if isValidID(id) {
+						return nil
+					}
+
+					txn, txnErr := generator.dbAccessor.BeginTxn(ctx)
+					if txnErr != nil {
+						return txnErr
+					}
+
+					defer txn.Close()
+
+					obj, queryErr := txn.QueryOne(
+						"select * from `pooled_id` where `name`=? and `partition`=? for update",
+						NewSmartMapper(pooledIDPrototype),
+						name, partition)
+					if queryErr != nil {
+						return queryErr
+					}
+
+					if obj == nil {
+						_, err = txn.Insert(&PooledID{
+							Name:      name,
+							Partition: partition,
+							PooledID:  1,
+						})
+						if err != nil {
+							return &insertError{err}
+						}
+
+						pool.UpdatePooledID(partition, 1)
+					} else {
+						pooledID := obj.(*PooledID)
+						pooledID.PooledID++
+						_, err = txn.Execute(
+							"update `pooled_id` set `pooled_id`=? where `name`=? and `partition`=?",
+							pooledID.PooledID,
+							name,
+							partition)
+						if err != nil {
+							return err
+						}
+
+						pool.UpdatePooledID(partition, pooledID.PooledID)
+					}
+
+					id, err = pool.NextID(ctx, partition)
+					return err
+				}()
+
+				if err != nil {
+					if e, ok := err.(*insertError); ok {
+						retryLeft--
+						if retryLeft == 0 {
+							err = e.Unwrap()
+						} else {
+							continue
+						}
+					}
+				}
+
+				// no need to retry
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+		}
+
+		uniqueID, err = NewUniqueID(id>>PooledIDBitWidth, partition, int32(id&SegmentedIDMask))
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return uniqueID, err
 }

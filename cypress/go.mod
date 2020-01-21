@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/dchest/captcha v0.0.0-20170622155422-6a29415a8364
 	github.com/go-redis/redis v6.15.2+incompatible
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/gorilla/handlers v1.4.0
