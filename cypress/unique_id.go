@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -261,6 +262,7 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 						if retryLeft == 0 {
 							err = e.Unwrap()
 						} else {
+							zap.L().Error("failed to allocate unique id", zap.Error(e.Unwrap()), zap.Int("retry", retryLeft))
 							continue
 						}
 					}

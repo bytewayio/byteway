@@ -4,15 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
-	"regexp"
-	"strings"
 	"time"
 
 	"go.uber.org/zap"
 )
-
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
 
 // Queryable a queryable object that could be a Connection, DB or Tx
 type Queryable interface {
@@ -51,13 +46,6 @@ type TableNameResolverFunc func(structName string) string
 // Resolve resolves struct name to table name
 func (resolver TableNameResolverFunc) Resolve(name string) string {
 	return resolver(name)
-}
-
-// ToSnakeCase maps CamelCase to SnakeCase
-func ToSnakeCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
 }
 
 // LogExec log the sql Exec call result
@@ -397,4 +385,9 @@ func (accessor *DbAccessor) BeginTxnWithIsolation(ctx context.Context, isolation
 // BeginTxn starts a new transaction with RepeatableRead isolation
 func (accessor *DbAccessor) BeginTxn(ctx context.Context) (*DbTxn, error) {
 	return accessor.BeginTxnWithIsolation(ctx, sql.LevelRepeatableRead)
+}
+
+// Conn gets a connection to the DB
+func (accessor *DbAccessor) Conn(ctx context.Context) (*sql.Conn, error) {
+	return accessor.db.Conn(ctx)
 }
