@@ -13,23 +13,15 @@ import (
 	"go.uber.org/zap"
 )
 
-/*
-public enum XATransactionState
-        {
-            None = 0,
-            Active,
-            Idle,
-            Prepared,
-            Rollback,
-            Committed
-        }*/
-
 const (
+	// ClusterTxnStateNone nil state
+	ClusterTxnStateNone = iota
+
 	// ClusterTxnStateCommitted state committed
-	ClusterTxnStateCommitted = 1
+	ClusterTxnStateCommitted
 
 	// ClusterTxnStateRollback state rollback
-	ClusterTxnStateRollback = 2
+	ClusterTxnStateRollback
 )
 
 const (
@@ -279,6 +271,7 @@ func (xa *XATransaction) rollback() error {
 
 // Close release xa transaction
 func (xa *XATransaction) Close() {
+	xa.conn.Close()
 	if xa.state == XAStatePrepared {
 		xa.resolver.resolve(xa.id)
 	}
@@ -388,6 +381,7 @@ type MyClusterTxn struct {
 	participants map[int32]*XATransaction
 	idGen        UniqueIDGenerator
 	resolver     *unknownStateTxnResolver
+	faulted      bool
 }
 
 func newMyClusterTxn(
@@ -405,11 +399,17 @@ func newMyClusterTxn(
 		participants: make(map[int32]*XATransaction),
 		idGen:        idGen,
 		resolver:     resolver,
+		faulted:      false,
 	}
 }
 
+// MarkAsFaulted mark transaction as faulted so that it will be rollback
+func (txn *MyClusterTxn) MarkAsFaulted() {
+	txn.faulted = true
+}
+
 // Commit commit all participants
-func (txn *MyClusterTxn) Commit() error {
+func (txn *MyClusterTxn) commit() error {
 	for _, t := range txn.participants {
 		err := t.prepare()
 		if err != nil {
@@ -446,7 +446,7 @@ func (txn *MyClusterTxn) Commit() error {
 }
 
 // Rollback rollback all participants
-func (txn *MyClusterTxn) Rollback() error {
+func (txn *MyClusterTxn) rollback() error {
 	for _, t := range txn.participants {
 		err := t.rollback()
 		if err != nil {
@@ -496,13 +496,27 @@ func (txn *MyClusterTxn) GetTxnByID(id int64) (*XATransaction, error) {
 
 // Close close and release all transactions
 func (txn *MyClusterTxn) Close() {
+	if !txn.faulted {
+		err := txn.commit()
+		if err != nil {
+			txn.faulted = true
+		}
+	}
+
+	if txn.faulted {
+		err := txn.rollback()
+		if err != nil {
+			zap.L().Error("failed to rollback transaction", zap.Error(err), zap.Int64("txnID", txn.id))
+		}
+	}
+
 	for _, t := range txn.participants {
 		t.Close()
 	}
 }
 
-// Insert insert an entity to the given partition
-func (txn *MyClusterTxn) Insert(partition int32, entity interface{}) (sql.Result, error) {
+// InsertAt insert an entity to the given partition
+func (txn *MyClusterTxn) InsertAt(partition int32, entity interface{}) (sql.Result, error) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 	if descriptor.key != nil && descriptor.key.autoGen {
 		id, err := txn.idGen.NextUniqueID(txn.ctx, descriptor.tableName, partition)

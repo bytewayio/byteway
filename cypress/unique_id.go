@@ -2,7 +2,6 @@ package cypress
 
 import (
 	"context"
-	"database/sql"
 	"encoding/binary"
 	"errors"
 	"reflect"
@@ -73,8 +72,8 @@ func GetPartitionKey(id int64) int32 {
 // PartitionCalculateFunc partition calculate function, implements PartitionCalculator
 type PartitionCalculateFunc func(key string) int32
 
-// GetPartitionKey implements PartitionCalculator
-func (calc PartitionCalculateFunc) GetPartitionKey(key string) int32 {
+// GetPartition implements PartitionCalculator
+func (calc PartitionCalculateFunc) GetPartition(key string) int32 {
 	return calc(key)
 }
 
@@ -169,9 +168,9 @@ func isValidID(id int64) bool {
 }
 
 // NewDbUniqueIDGenerator creates a db based unique id generator
-func NewDbUniqueIDGenerator(db *sql.DB) *DbUniqueIDGenerator {
+func NewDbUniqueIDGenerator(dbAccessor *DbAccessor) *DbUniqueIDGenerator {
 	return &DbUniqueIDGenerator{
-		dbAccessor: NewDbAccessor(db),
+		dbAccessor: dbAccessor,
 		pools:      NewConcurrentMapTypeEnforced(reflect.TypeOf(&UniqueIDPool{})),
 	}
 }

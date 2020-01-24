@@ -57,7 +57,7 @@ func TestGenerateMoreThanMaxSegmentedIdValues(t *testing.T) {
 			return err
 		}
 
-		gen := NewDbUniqueIDGenerator(db)
+		gen := NewDbUniqueIDGenerator(NewDbAccessor(db))
 		for i := 0; i < 200; i = i + 1 {
 			gen.NextUniqueID(context.Background(), "testKey", 1)
 		}
@@ -133,8 +133,8 @@ func TestConcurrentGeneration(t *testing.T) {
 		}
 
 		ch := make(chan []int64)
-		g1 := NewDbUniqueIDGenerator(db)
-		g2 := NewDbUniqueIDGenerator(db)
+		g1 := NewDbUniqueIDGenerator(NewDbAccessor(db))
+		g2 := NewDbUniqueIDGenerator(NewDbAccessor(db))
 		go func() {
 			ch <- generateIDs(g1, 500)
 		}()
