@@ -274,6 +274,9 @@ func (xa *XATransaction) Close() {
 	xa.conn.Close()
 	if xa.state == XAStatePrepared {
 		xa.resolver.resolve(xa.id)
+	} else if xa.state == XAStateActive || xa.state == XAStateIdle {
+		err := xa.rollback()
+		zap.L().Error("failed to rollback faulted transaction", zap.Error(err), zap.String("txnID", xa.id))
 	}
 }
 
@@ -283,6 +286,13 @@ func (xa *XATransaction) Insert(entity interface{}) (sql.Result, error) {
 	var r sql.Result
 	var err error
 	LogOperation(xa.ctx, "Insert"+ty.Name(), func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = xa.conn.ExecContext(xa.ctx, ed.InsertSQL, ed.GetInsertValues(entity)...)
 		return err
@@ -297,6 +307,13 @@ func (xa *XATransaction) Update(entity interface{}) (sql.Result, error) {
 	var r sql.Result
 	var err error
 	LogOperation(xa.ctx, "Update"+ty.Name(), func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
 		args = append(args, ed.GetKeyValue(entity))
@@ -313,6 +330,13 @@ func (xa *XATransaction) Delete(entity interface{}) (sql.Result, error) {
 	var r sql.Result
 	var err error
 	LogOperation(xa.ctx, "Delete"+ty.Name(), func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = xa.conn.ExecContext(xa.ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
 		return err
@@ -326,6 +350,13 @@ func (xa *XATransaction) Execute(command string, args ...interface{}) (sql.Resul
 	var r sql.Result
 	var err error
 	LogOperation(xa.ctx, "ExecuteCommand", func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		r, err = xa.conn.ExecContext(xa.ctx, command, args...)
 		return err
 	})
@@ -340,6 +371,13 @@ func (xa *XATransaction) GetOne(proto interface{}, id interface{}) (interface{},
 	var result interface{}
 	var err error
 	LogOperation(xa.ctx, "GetOne"+ty.Name(), func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		ed := GetOrCreateEntityDescriptor(ty)
 		result, err = QueryOne(xa.ctx, xa.conn, mapper, ed.GetOneSQL, id)
 		return err
@@ -353,6 +391,13 @@ func (xa *XATransaction) QueryOne(query string, mapper RowMapper, args ...interf
 	var result interface{}
 	var err error
 	LogOperation(xa.ctx, "QueryOne", func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		result, err = QueryOne(xa.ctx, xa.conn, mapper, query, args...)
 		return err
 	})
@@ -365,6 +410,13 @@ func (xa *XATransaction) QueryAll(query string, mapper RowMapper, args ...interf
 	var result []interface{}
 	var err error
 	LogOperation(xa.ctx, "QueryAll", func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
 		result, err = QueryAll(xa.ctx, xa.conn, mapper, query, args...)
 		return err
 	})
@@ -525,6 +577,10 @@ func (txn *MyClusterTxn) InsertAt(partition int32, entity interface{}) (sql.Resu
 		}
 
 		v := reflect.ValueOf(entity)
+		for v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+
 		f := v.FieldByIndex(descriptor.key.field.field.Index)
 		f.SetInt(id.Value)
 	}
@@ -542,6 +598,10 @@ func (txn *MyClusterTxn) Update(entity interface{}) (sql.Result, error) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 	if descriptor.key != nil {
 		v := reflect.ValueOf(entity)
+		for v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+
 		f := v.FieldByIndex(descriptor.key.field.field.Index)
 		k, ok := f.Interface().(int64)
 		if !ok {

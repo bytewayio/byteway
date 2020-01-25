@@ -284,7 +284,13 @@ func (cluster *MyCluster) Insert(ctx context.Context, entity interface{}) error 
 		return err
 	}
 
-	return cluster.InsertAt(ctx, partition, entity)
+	err = cluster.generateKeyForEntity(ctx, descriptor, partition, &value)
+	if err != nil {
+		return err
+	}
+
+	_, err = cluster.GetDbAccessor(partition).Insert(ctx, entity)
+	return err
 }
 
 // Update update the entity based on the key in the entity

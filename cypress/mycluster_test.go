@@ -372,36 +372,119 @@ func TestClusterGetAll(t *testing.T) {
 	})
 }
 
-/*
+func TestClusterTxnWithSuccess(t *testing.T) {
+	runClusterTest(t, func(cluster *MyCluster) error {
+		err := func() error {
+			b1 := &balance{
+				AccountName: "test1",
+				Amount:      100,
+			}
+			b2 := &balance{
+				AccountName: "test3",
+				Amount:      200,
+			}
 
-       [TestMethod]
-       public void TestGetAll()
-       {
-           Balance balance1 = new Balance
-           {
-               Amount = 100,
-               AccountName = "test1"
-           };
-           Balance balance2 = new Balance
-           {
-               Amount = 200,
-               AccountName = "test2"
-           };
-           this.cluster.Insert(CallContext.Default, 7, balance1).Wait();
-           this.cluster.Insert(CallContext.Default, 8, balance2).Wait();
-           this.cluster.Insert(CallContext.Default, new SubBalance
-           {
-               BalanceId = balance1.Id,
-               Adjustment = 100
-           }).Wait();
-           IEnumerable<Balance> all = CollectionsUtil.Join(this.cluster.GetAll<Balance>(CallContext.Default, "select * from `balance`").Result);
-           Assert.AreEqual(2, all.Count());
+			txn, err := cluster.CreateTransaction(context.Background())
+			if err != nil {
+				return err
+			}
 
-           var subBalance = this.cluster.GetDataAccessor(balance1.Id).GetOne<SubBalance>(s => s.BalanceId == balance1.Id).Result;
-           Assert.IsNotNull(subBalance);
-           Assert.AreEqual(100, subBalance.Adjustment);
-       }
+			defer txn.Close()
+			_, err = txn.InsertAt(0, b1)
+			if err != nil {
+				return err
+			}
 
+			_, err = txn.InsertAt(1, b2)
+			if err != nil {
+				return err
+			}
 
-   }
-*/
+			return nil
+		}()
+
+		if err != nil {
+			return err
+		}
+
+		all, err := cluster.GetAll(context.Background(), &balance{}, "select * from `balance`")
+		if err != nil {
+			return err
+		}
+
+		if len(all) != 2 {
+			t.Error("unexpected number of partitions", len(all))
+			return nil
+		}
+
+		count := 0
+		for _, l := range all {
+			count += len(l)
+		}
+
+		if count != 2 {
+			t.Error("unexpected number of entities", count)
+		}
+
+		return nil
+	})
+}
+
+func TestClusterTxnWithFailure(t *testing.T) {
+	runClusterTest(t, func(cluster *MyCluster) error {
+		err := func() error {
+			b1 := &balance{
+				AccountName: "test1",
+				Amount:      100,
+			}
+			b2 := &balance{
+				AccountName: "test3",
+				Amount:      200,
+			}
+
+			txn, err := cluster.CreateTransaction(context.Background())
+			if err != nil {
+				return err
+			}
+
+			defer txn.Close()
+			_, err = txn.InsertAt(0, b1)
+			if err != nil {
+				return err
+			}
+
+			_, err = txn.InsertAt(1, b2)
+			if err != nil {
+				return err
+			}
+
+			txn.MarkAsFaulted()
+			return nil
+		}()
+
+		if err != nil {
+			return err
+		}
+
+		all, err := cluster.GetAll(context.Background(), &balance{}, "select * from `balance`")
+		if err != nil {
+			return err
+		}
+
+		if len(all) != 2 {
+			t.Error("unexpected number of partitions", len(all))
+			return nil
+		}
+
+		count := 0
+		for _, l := range all {
+			count += len(l)
+		}
+
+		if count != 0 {
+			t.Error("unexpected number of entities", count)
+		}
+
+		return nil
+	})
+}
