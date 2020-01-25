@@ -81,6 +81,11 @@ func (cluster *MyCluster) getPartitionFromEntity(descriptor *EntityDescriptor, e
 		return -1, errors.New("No key defined or key is tagged with nogen")
 	}
 
+	if entityValue.Kind() == reflect.Ptr {
+		v := entityValue.Elem()
+		entityValue = &v
+	}
+
 	partitionKey := entityValue.FieldByIndex(descriptor.partitionKey.field.Index).Interface()
 	strValue, ok := partitionKey.(string)
 
@@ -99,10 +104,15 @@ func (cluster *MyCluster) getPartitionFromEntity(descriptor *EntityDescriptor, e
 }
 
 func (cluster *MyCluster) generateKeyForEntity(ctx context.Context, descriptor *EntityDescriptor, partition int32, entityValue *reflect.Value) error {
-	if descriptor.key != nil {
+	if descriptor.key != nil && descriptor.key.autoGen {
 		uniqueID, err := cluster.idGen.NextUniqueID(ctx, descriptor.tableName, partition)
 		if err != nil {
 			return err
+		}
+
+		if entityValue.Kind() == reflect.Ptr {
+			v := entityValue.Elem()
+			entityValue = &v
 		}
 
 		entityValue.FieldByIndex(descriptor.key.field.field.Index).SetInt(uniqueID.Value)
@@ -114,6 +124,11 @@ func (cluster *MyCluster) generateKeyForEntity(ctx context.Context, descriptor *
 func (cluster *MyCluster) getEntityKey(descriptor *EntityDescriptor, entityValue *reflect.Value) (int64, error) {
 	if descriptor.key == nil {
 		return -1, errors.New("no key defined")
+	}
+
+	if entityValue.Kind() == reflect.Ptr {
+		v := entityValue.Elem()
+		entityValue = &v
 	}
 
 	id, ok := entityValue.FieldByIndex(descriptor.key.field.field.Index).Interface().(int64)
@@ -152,8 +167,8 @@ func (cluster *MyCluster) GetDbAccessorByID(id int64) *DbAccessor {
 	return cluster.GetDbAccessor(GetPartitionKey(id))
 }
 
-// InsertToPartition insert entity to specific partition
-func (cluster *MyCluster) InsertToPartition(ctx context.Context, partition int32, entity interface{}) error {
+// InsertAt insert entity to specific partition
+func (cluster *MyCluster) InsertAt(ctx context.Context, partition int32, entity interface{}) error {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 	value := reflect.ValueOf(entity)
 	err := cluster.generateKeyForEntity(ctx, descriptor, partition, &value)
@@ -257,7 +272,7 @@ func (cluster *MyCluster) Delete(ctx context.Context, entity interface{}) (sql.R
 
 // InsertByKey insert entity to db based on given partition key
 func (cluster *MyCluster) InsertByKey(ctx context.Context, partitionKey string, entity interface{}) error {
-	return cluster.InsertToPartition(ctx, cluster.partitionCalc.GetPartition(partitionKey), entity)
+	return cluster.InsertAt(ctx, cluster.partitionCalc.GetPartition(partitionKey), entity)
 }
 
 // Insert insert the entity to db based on the tagged partition key
@@ -269,12 +284,7 @@ func (cluster *MyCluster) Insert(ctx context.Context, entity interface{}) error 
 		return err
 	}
 
-	err = cluster.generateKeyForEntity(ctx, descriptor, partition, &value)
-	if err != nil {
-		return err
-	}
-
-	return cluster.InsertToPartition(ctx, partition, entity)
+	return cluster.InsertAt(ctx, partition, entity)
 }
 
 // Update update the entity based on the key in the entity
