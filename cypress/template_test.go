@@ -251,10 +251,6 @@ func TestSkinManager(t *testing.T) {
 		t.Error("failed to execute index")
 		return
 	}
-	if err != nil {
-		t.Error("failed to execute index")
-		return
-	}
 
 	result = readBuffer(resultWriter.Buffer)
 
@@ -283,10 +279,6 @@ func TestSkinManager(t *testing.T) {
 	}
 
 	err = tmpl.ExecuteTemplate(resultWriter, "index", model)
-	if err != nil {
-		t.Error("failed to execute index")
-		return
-	}
 	if err != nil {
 		t.Error("failed to execute index")
 		return
