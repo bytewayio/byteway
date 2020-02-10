@@ -463,6 +463,7 @@ func (server *WebServer) createCaptcha(writer http.ResponseWriter, request *http
 	var session *Session
 	var err error
 	customSession := false
+	request.ParseForm()
 	sessid := request.FormValue(CaptchaSessionKey)
 	if sessid != "" {
 		session, err = server.sessionStore.Get(sessid)
