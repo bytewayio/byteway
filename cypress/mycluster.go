@@ -1,14 +1,12 @@
 package cypress
 
-import "math/rand"
-
-import "context"
-
-import "reflect"
-
-import "errors"
-
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"math/rand"
+	"reflect"
+)
 
 // MyCluster MySQL based database cluster, up to 32 physical partitions,
 // for cluster that requires more than 32 partitions, consider tidb or
@@ -75,10 +73,6 @@ func (cluster *MyCluster) GetUniqueID(ctx context.Context, entity interface{}, p
 func (cluster *MyCluster) getPartitionFromEntity(descriptor *EntityDescriptor, entityValue *reflect.Value) (int32, error) {
 	if descriptor.partitionKey == nil {
 		return -1, errors.New("No partition key defined")
-	}
-
-	if descriptor.key == nil || !descriptor.key.autoGen {
-		return -1, errors.New("No key defined or key is tagged with nogen")
 	}
 
 	if entityValue.Kind() == reflect.Ptr {
