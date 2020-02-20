@@ -48,6 +48,16 @@ func (session *WebSocketSession) SendBinaryMessage(data []byte) error {
 	return session.connection.WriteMessage(websocket.BinaryMessage, data)
 }
 
+func (session *WebSocketSession) sendPongMessage(data []byte) error {
+	session.lock.Lock()
+	defer session.lock.Unlock()
+	if session.writeTimeout > time.Duration(0) {
+		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
+	}
+
+	return session.connection.WriteMessage(websocket.PongMessage, data)
+}
+
 //WebSocketListener web socket listener that could be used to listen on a specific web socket endpoint
 type WebSocketListener interface {
 	// OnConnect when a connection is established
@@ -154,6 +164,13 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 			handler.Listener.OnClose(session, websocket.CloseNormalClosure)
 			session.connection.Close()
 			return
+		case websocket.PingMessage:
+			err = session.sendPongMessage(data)
+			if err != nil {
+				zap.L().Error("not able to write pong message back", zap.Error(err), zap.String("remoteAddr", session.connection.RemoteAddr().String()))
+			}
+
+			break
 		default:
 			zap.L().Error("not able to handle message type", zap.Int("messageType", msgType))
 			break
