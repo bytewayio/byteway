@@ -175,15 +175,15 @@ func NewDbUniqueIDGenerator(dbAccessor *DbAccessor) *DbUniqueIDGenerator {
 	}
 }
 
-type insertError struct {
+type retryableError struct {
 	err error
 }
 
-func (e *insertError) Error() string {
+func (e *retryableError) Error() string {
 	return e.err.Error()
 }
 
-func (e *insertError) Unwrap() error {
+func (e *retryableError) Unwrap() error {
 	return e.err
 }
 
@@ -210,15 +210,9 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 						return nil
 					}
 
-					txn, txnErr := generator.dbAccessor.BeginTxn(ctx)
-					if txnErr != nil {
-						return txnErr
-					}
-
-					defer txn.Close()
-
-					obj, queryErr := txn.QueryOne(
-						"select * from `pooled_id` where `name`=? and `partition`=? for update",
+					obj, queryErr := generator.dbAccessor.QueryOne(
+						ctx,
+						"select * from `pooled_id` where `name`=? and `partition`=?",
 						NewSmartMapper(pooledIDPrototype),
 						name, partition)
 					if queryErr != nil {
@@ -226,29 +220,37 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 					}
 
 					if obj == nil {
-						_, err = txn.Insert(&PooledID{
-							Name:      name,
-							Partition: partition,
-							PooledID:  1,
-						})
+						_, err = generator.dbAccessor.Insert(
+							ctx,
+							&PooledID{
+								Name:      name,
+								Partition: partition,
+								PooledID:  1,
+							})
 						if err != nil {
-							return &insertError{err}
+							return &retryableError{err}
 						}
 
 						pool.UpdatePooledID(partition, 1)
 					} else {
 						pooledID := obj.(*PooledID)
-						pooledID.PooledID++
-						_, err = txn.Execute(
-							"update `pooled_id` set `pooled_id`=? where `name`=? and `partition`=?",
-							pooledID.PooledID,
+						r, err := generator.dbAccessor.Execute(
+							ctx,
+							"update `pooled_id` set `pooled_id`=`pooled_id`+1 where `name`=? and `partition`=? and `pooled_id`=?",
 							name,
-							partition)
+							partition,
+							pooledID.PooledID)
 						if err != nil {
 							return err
 						}
 
-						pool.UpdatePooledID(partition, pooledID.PooledID)
+						if cnt, _ := r.RowsAffected(); cnt == 0 {
+							return &retryableError{
+								err: errors.New("try to update a row that has been changed"),
+							}
+						}
+
+						pool.UpdatePooledID(partition, pooledID.PooledID+1)
 					}
 
 					id, err = pool.NextID(ctx, partition)
@@ -256,7 +258,7 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 				}()
 
 				if err != nil {
-					if e, ok := err.(*insertError); ok {
+					if e, ok := err.(*retryableError); ok {
 						retryLeft--
 						if retryLeft == 0 {
 							err = e.Unwrap()
@@ -277,11 +279,7 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 		}
 
 		uniqueID, err = NewUniqueID(id>>PooledIDBitWidth, partition, int32(id&SegmentedIDMask))
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return err
 	})
 
 	return uniqueID, err
