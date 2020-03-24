@@ -11,6 +11,7 @@ import (
 
 // WebSocketSession a connected web socket session
 type WebSocketSession struct {
+	RemoteAddr   string
 	User         *UserPrincipal
 	Session      *Session
 	Context      map[string]interface{}
@@ -73,6 +74,12 @@ type WebSocketListener interface {
 	OnClose(session *WebSocketSession, reason int)
 }
 
+// PingMessageHandler websocket ping message handler, provide API to handle websocket ping messages
+type PingMessageHandler interface {
+	// OnPingMessage when a ping message is received, no need to send back pong message, which is done automatically
+	OnPingMessage(session *WebSocketSession)
+}
+
 var upgrader = websocket.Upgrader{}
 
 // WebSocketHandler Web socket handler
@@ -94,7 +101,7 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 
 	conn, err := upgrader.Upgrade(writer, request, nil)
 	if err != nil {
-		zap.L().Error("failed to upgrade the incoming connection to a websocket", zap.Error(err))
+		zap.L().Error("failed to upgrade the incoming connection to a websocket", zap.Error(err), zap.String("remoteAddr", request.RemoteAddr))
 		writer.WriteHeader(http.StatusBadRequest)
 		writer.Write([]byte("<h1>Bad request</h1>"))
 		return
@@ -107,7 +114,7 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 		var ok bool
 		session, ok = contextValue.(*Session)
 		if !ok {
-			zap.L().Error("invalid session object in SessionKey")
+			zap.L().Error("invalid session object in SessionKey", zap.String("remoteAddr", request.RemoteAddr))
 			writer.WriteHeader(http.StatusInternalServerError)
 			writer.Write([]byte("<h1>bad server configuration</h1>"))
 			return
@@ -115,7 +122,7 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 	}
 
 	if session == nil {
-		zap.L().Error("session handler is required for websocket handler")
+		zap.L().Error("session handler is required for websocket handler", zap.String("remoteAddr", request.RemoteAddr))
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		writer.Write([]byte("<h1>A http session is required</h1>"))
 		return
@@ -134,7 +141,14 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 		conn.EnableWriteCompression(true)
 	}
 
-	webSocketSession := &WebSocketSession{userPrincipal, session, make(map[string]interface{}), conn, handler.WriteTimeout, &sync.Mutex{}}
+	webSocketSession := &WebSocketSession{
+		request.RemoteAddr,
+		userPrincipal,
+		session,
+		make(map[string]interface{}),
+		conn,
+		handler.WriteTimeout, &sync.Mutex{},
+	}
 	handler.Listener.OnConnect(webSocketSession)
 	go handler.connectionLoop(webSocketSession)
 }
@@ -147,7 +161,7 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 
 		msgType, data, err := session.connection.ReadMessage()
 		if err != nil {
-			zap.L().Error("failed to read from ws peer", zap.Error(err))
+			zap.L().Error("failed to read from ws peer", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
 			handler.Listener.OnClose(session, websocket.CloseAbnormalClosure)
 			session.connection.Close()
 			return
@@ -165,14 +179,19 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 			session.connection.Close()
 			return
 		case websocket.PingMessage:
+			h, ok := handler.Listener.(PingMessageHandler)
+			if ok {
+				h.OnPingMessage(session)
+			}
+
 			err = session.sendPongMessage(data)
 			if err != nil {
-				zap.L().Error("not able to write pong message back", zap.Error(err), zap.String("remoteAddr", session.connection.RemoteAddr().String()))
+				zap.L().Error("not able to write pong message back", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
 			}
 
 			break
 		default:
-			zap.L().Error("not able to handle message type", zap.Int("messageType", msgType))
+			zap.L().Error("not able to handle message type", zap.Int("messageType", msgType), zap.String("remoteAddr", session.RemoteAddr))
 			break
 		}
 	}
