@@ -46,9 +46,9 @@ const (
 
 // ClusterTxn cluster transaction object in master database
 type ClusterTxn struct {
-	ID        int64 `col:"id" dtags:"key,autoinc"`
-	State     int   `col:"state"`
-	Timestamp int64 `col:"timestamp"`
+	ID        string `col:"id" dtags:"key,nogen"`
+	State     int    `col:"state"`
+	Timestamp int64  `col:"timestamp"`
 }
 
 // XaTxnID xa transaction id format
@@ -76,16 +76,10 @@ func (r *unknownStateTxnResolver) resolve(txnID string) {
 		return
 	}
 
-	transactionID, err := strconv.ParseInt(ids[0], 10, 64)
-	if err != nil {
-		zap.L().Error("invalid transaction id", zap.String("txnId", txnID), zap.Error(err))
-		return
-	}
-
-	r.resolveTxn(transactionID)
+	r.resolveTxn(ids[0])
 }
 
-func (r *unknownStateTxnResolver) resolveTxn(txnID int64) {
+func (r *unknownStateTxnResolver) resolveTxn(txnID string) {
 	dbTxn, err := r.master.BeginTxn(context.Background())
 	if err != nil {
 		zap.L().Error("failed to start transaction to resolve unknown state txn", zap.Error(err))
@@ -95,7 +89,7 @@ func (r *unknownStateTxnResolver) resolveTxn(txnID int64) {
 	defer dbTxn.Close()
 	item, err := dbTxn.QueryOne("select * from `cluster_txn` where `id`=? for update", NewSmartMapper(&ClusterTxn{}), txnID)
 	if err != nil {
-		zap.L().Error("failed to get transaction", zap.Int64("txnID", txnID))
+		zap.L().Error("failed to get transaction", zap.String("txnID", txnID))
 		return
 	}
 
@@ -114,7 +108,7 @@ func (r *unknownStateTxnResolver) resolveTxn(txnID int64) {
 	for _, p := range participants {
 		participant := p.(int)
 		if participant < 0 {
-			zap.L().Info("invalid participant for transaction", zap.Int("participant", participant), zap.Int64("txnID", txnID))
+			zap.L().Info("invalid participant for transaction", zap.Int("participant", participant), zap.String("txnID", txnID))
 			continue
 		}
 
@@ -138,21 +132,21 @@ func (r *unknownStateTxnResolver) resolveTxn(txnID int64) {
 		if txnFound {
 			_, err = dbAccessor.Execute(context.Background(), fmt.Sprintf("XA %v %v", action, xaid))
 			if err != nil {
-				zap.L().Error("failed to fix transaction", zap.Error(err), zap.Int64("txnID", txnID), zap.Int("participant", participant))
+				zap.L().Error("failed to fix transaction", zap.Error(err), zap.String("txnID", txnID), zap.Int("participant", participant))
 			} else {
-				zap.L().Info("transaction fixed", zap.Int64("txnID", txnID), zap.Int("participant", participant))
+				zap.L().Info("transaction fixed", zap.String("txnID", txnID), zap.Int("participant", participant))
 			}
 		}
 	}
 
 	_, err = dbTxn.Execute("delete from `cluster_txn` where `id`=?", txnID)
 	if err != nil {
-		zap.L().Info("failed to cleanup txn from master", zap.Int64("txnID", txnID))
+		zap.L().Info("failed to cleanup txn from master", zap.String("txnID", txnID))
 	}
 
 	_, err = dbTxn.Execute("delete from `txn_participant` where `txn_id`=?", txnID)
 	if err != nil {
-		zap.L().Info("failed to cleanup participants from master", zap.Int64("txnID", txnID))
+		zap.L().Info("failed to cleanup participants from master", zap.String("txnID", txnID))
 	}
 }
 
@@ -426,7 +420,7 @@ func (xa *XATransaction) QueryAll(query string, mapper RowMapper, args ...interf
 
 // MyClusterTxn cluster supported 2PC transaction
 type MyClusterTxn struct {
-	id           int64
+	id           string
 	ctx          context.Context
 	master       *DbAccessor
 	partitions   []*DbAccessor
@@ -438,7 +432,7 @@ type MyClusterTxn struct {
 
 func newMyClusterTxn(
 	ctx context.Context,
-	id int64,
+	id string,
 	master *DbAccessor,
 	partitions []*DbAccessor,
 	idGen UniqueIDGenerator,
@@ -558,7 +552,7 @@ func (txn *MyClusterTxn) Close() {
 	if txn.faulted {
 		err := txn.rollback()
 		if err != nil {
-			zap.L().Error("failed to rollback transaction", zap.Error(err), zap.Int64("txnID", txn.id))
+			zap.L().Error("failed to rollback transaction", zap.Error(err), zap.String("txnID", txn.id))
 		}
 	}
 
