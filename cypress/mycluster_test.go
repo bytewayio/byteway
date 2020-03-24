@@ -17,12 +17,12 @@ const (
 		constraint pk_pooled_id primary key (name, ` + "`" + `partition` + "`" + `)
 	  ) engine=InnoDB default charset=utf8;
 	  create table cluster_txn (
-		  id bigint auto_increment not null primary key,
+		  id varchar(40) not null primary key,
 		  state int not null default 0,
 		  ` + "`" + `timestamp` + "`" + ` bigint not null
-	  ) engine=InnoDB default charset=utf8 auto_increment=10001;
+	  ) engine=InnoDB default charset=utf8;
 	  create table txn_participant (
-		  txn_id bigint not null,
+		  txn_id varchar(40) not null,
 		  ` + "`" + `partition` + "`" + ` int not null,
 		  state int not null default 0,
 		  constraint pk_txn_participant primary key (txn_id, ` + "`" + `partition` + "`" + `)

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"math/rand"
 	"reflect"
+
+	"github.com/gofrs/uuid"
 )
 
 // MyCluster MySQL based database cluster, up to 32 physical partitions,
@@ -176,17 +178,23 @@ func (cluster *MyCluster) InsertAt(ctx context.Context, partition int32, entity 
 
 // CreateTransaction creates a cluster transaction
 func (cluster *MyCluster) CreateTransaction(ctx context.Context) (*MyClusterTxn, error) {
-	insertResult, err := cluster.master.Execute(ctx, "insert into `cluster_txn`(`state`, `timestamp`) values (?, ?)", ClusterTxnStateNone, GetEpochMillis())
+	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
 
-	txnID, err := insertResult.LastInsertId()
+	txn := &ClusterTxn{
+		ID:        id.String(),
+		State:     ClusterTxnStateNone,
+		Timestamp: GetEpochMillis(),
+	}
+
+	_, err = cluster.master.Insert(ctx, txn)
 	if err != nil {
 		return nil, err
 	}
 
-	return newMyClusterTxn(ctx, txnID, cluster.master, cluster.partitions, cluster.idGen, cluster.unknownResolver), nil
+	return newMyClusterTxn(ctx, txn.ID, cluster.master, cluster.partitions, cluster.idGen, cluster.unknownResolver), nil
 }
 
 // InsertToAll insert entity to all partitions
