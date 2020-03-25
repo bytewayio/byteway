@@ -86,6 +86,16 @@ func (l *TestWsListener) OnBinaryMessage(session *WebSocketSession, message []by
 	}
 }
 
+func (l *TestWsListener) OnPingMessage(session *WebSocketSession, text string) error {
+	fmt.Println("Received a ping message", text)
+	return nil
+}
+
+func (l *TestWsListener) OnPongMessage(session *WebSocketSession, text string) error {
+	fmt.Println("Received a pong message", text)
+	return nil
+}
+
 func testActions(t *testing.T) []Action {
 	actions := []Action{
 		Action{
@@ -461,5 +471,28 @@ func TestWebServer(t *testing.T) {
 	if msgType != websocket.TextMessage || err != nil || string(msg) != "Hello, websocket!" {
 		t.Error("failed to read back the message")
 		DumpBufferWriter(t, writer)
+		return
 	}
+
+	pongC := make(chan int)
+	c.SetPongHandler(func(data string) error {
+		fmt.Println("received a pong message", data)
+		if data != "ping" {
+			t.Error("Received a bad pong message")
+			DumpBufferWriter(t, writer)
+		}
+		go func() {
+			pongC <- 1
+		}()
+		return nil
+	})
+	err = c.WriteMessage(websocket.PingMessage, []byte("ping"))
+	if err != nil {
+		t.Error("failed to send ping message", err.Error())
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	go c.ReadMessage()
+	<-pongC
 }

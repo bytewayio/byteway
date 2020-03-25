@@ -27,7 +27,7 @@ func (session *WebSocketSession) Close() error {
 	return session.connection.Close()
 }
 
-// SendTextMessage sends a text message to the remote
+// SendTextMessage sends a text message to the remote, a more convenient version of SendMessage
 func (session *WebSocketSession) SendTextMessage(text string) error {
 	session.lock.Lock()
 	defer session.lock.Unlock()
@@ -38,7 +38,7 @@ func (session *WebSocketSession) SendTextMessage(text string) error {
 	return session.connection.WriteMessage(websocket.TextMessage, []byte(text))
 }
 
-// SendBinaryMessage sends a binary message to the remote
+// SendBinaryMessage sends a binary message to the remote, a more convenient version of SendMessage
 func (session *WebSocketSession) SendBinaryMessage(data []byte) error {
 	session.lock.Lock()
 	defer session.lock.Unlock()
@@ -49,14 +49,15 @@ func (session *WebSocketSession) SendBinaryMessage(data []byte) error {
 	return session.connection.WriteMessage(websocket.BinaryMessage, data)
 }
 
-func (session *WebSocketSession) sendPongMessage(data []byte) error {
+// SendMessage sends a message with the given type
+func (session *WebSocketSession) SendMessage(msgType int, data []byte) error {
 	session.lock.Lock()
 	defer session.lock.Unlock()
 	if session.writeTimeout > time.Duration(0) {
-		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
+		session.connection.SetWriteDeadline((time.Now().Add(session.writeTimeout)))
 	}
 
-	return session.connection.WriteMessage(websocket.PongMessage, data)
+	return session.connection.WriteMessage(msgType, data)
 }
 
 //WebSocketListener web socket listener that could be used to listen on a specific web socket endpoint
@@ -74,10 +75,15 @@ type WebSocketListener interface {
 	OnClose(session *WebSocketSession, reason int)
 }
 
-// PingMessageHandler websocket ping message handler, provide API to handle websocket ping messages
-type PingMessageHandler interface {
-	// OnPingMessage when a ping message is received, no need to send back pong message, which is done automatically
-	OnPingMessage(session *WebSocketSession)
+// KeepAliveMessageHandler websocket message handler to handle ping/pong messages
+// for ping message, a pong message will be sent back after OnPingMessage is returned.
+type KeepAliveMessageHandler interface {
+	// OnPingMessage when a ping message is received, no need to send back pong message,
+	// which is done right after this handler
+	OnPingMessage(session *WebSocketSession, text string) error
+
+	// OnPongMessage when a pong message is received, this API will be called to notify the application
+	OnPongMessage(session *WebSocketSession, text string) error
 }
 
 var upgrader = websocket.Upgrader{}
@@ -154,6 +160,26 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 }
 
 func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
+	if h, ok := handler.Listener.(KeepAliveMessageHandler); ok {
+		session.connection.SetPingHandler(func(pingData string) error {
+			err := h.OnPingMessage(session, pingData)
+			if err != nil {
+				zap.L().Error("handle ping message failed", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
+				return err
+			}
+
+			err = session.SendMessage(websocket.PongMessage, []byte(pingData))
+			if err != nil {
+				zap.L().Error("not able to write pong message back", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
+			}
+
+			return err
+		})
+		session.connection.SetPongHandler(func(pongData string) error {
+			return h.OnPongMessage(session, pongData)
+		})
+	}
+
 	for {
 		if handler.ReadTimeout > time.Duration(0) {
 			session.connection.SetReadDeadline(time.Now().Add(handler.ReadTimeout))
@@ -178,18 +204,6 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 			handler.Listener.OnClose(session, websocket.CloseNormalClosure)
 			session.connection.Close()
 			return
-		case websocket.PingMessage:
-			h, ok := handler.Listener.(PingMessageHandler)
-			if ok {
-				h.OnPingMessage(session)
-			}
-
-			err = session.sendPongMessage(data)
-			if err != nil {
-				zap.L().Error("not able to write pong message back", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
-			}
-
-			break
 		default:
 			zap.L().Error("not able to handle message type", zap.Int("messageType", msgType), zap.String("remoteAddr", session.RemoteAddr))
 			break
