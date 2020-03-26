@@ -16,48 +16,55 @@ type WebSocketSession struct {
 	Session      *Session
 	Context      map[string]interface{}
 	connection   *websocket.Conn
+	readTimeout  time.Duration
 	writeTimeout time.Duration
-	lock         *sync.Mutex
+	readLock     *sync.Mutex
+	writeLock    *sync.Mutex
 }
 
 // Close close the underlying connection of the WebSocketSession
 func (session *WebSocketSession) Close() error {
-	session.lock.Lock()
-	defer session.lock.Unlock()
+	session.writeLock.Lock()
+	defer session.writeLock.Unlock()
 	return session.connection.Close()
 }
 
 // SendTextMessage sends a text message to the remote, a more convenient version of SendMessage
 func (session *WebSocketSession) SendTextMessage(text string) error {
-	session.lock.Lock()
-	defer session.lock.Unlock()
-	if session.writeTimeout > time.Duration(0) {
-		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
-	}
-
+	session.writeLock.Lock()
+	defer session.writeLock.Unlock()
+	session.resetWriteTimeout()
 	return session.connection.WriteMessage(websocket.TextMessage, []byte(text))
 }
 
 // SendBinaryMessage sends a binary message to the remote, a more convenient version of SendMessage
 func (session *WebSocketSession) SendBinaryMessage(data []byte) error {
-	session.lock.Lock()
-	defer session.lock.Unlock()
-	if session.writeTimeout > time.Duration(0) {
-		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
-	}
-
+	session.writeLock.Lock()
+	defer session.writeLock.Unlock()
+	session.resetWriteTimeout()
 	return session.connection.WriteMessage(websocket.BinaryMessage, data)
 }
 
 // SendMessage sends a message with the given type
 func (session *WebSocketSession) SendMessage(msgType int, data []byte) error {
-	session.lock.Lock()
-	defer session.lock.Unlock()
-	if session.writeTimeout > time.Duration(0) {
-		session.connection.SetWriteDeadline((time.Now().Add(session.writeTimeout)))
-	}
-
+	session.writeLock.Lock()
+	defer session.writeLock.Unlock()
+	session.resetWriteTimeout()
 	return session.connection.WriteMessage(msgType, data)
+}
+
+func (session *WebSocketSession) resetReadTimeout() {
+	session.readLock.Lock()
+	defer session.readLock.Unlock()
+	if session.readTimeout > time.Duration(0) {
+		session.connection.SetReadDeadline(time.Now().Add(session.readTimeout))
+	}
+}
+
+func (session *WebSocketSession) resetWriteTimeout() {
+	if session.writeTimeout > time.Duration(0) {
+		session.connection.SetWriteDeadline(time.Now().Add(session.writeTimeout))
+	}
 }
 
 //WebSocketListener web socket listener that could be used to listen on a specific web socket endpoint
@@ -153,7 +160,10 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 		session,
 		make(map[string]interface{}),
 		conn,
-		handler.WriteTimeout, &sync.Mutex{},
+		handler.ReadTimeout,
+		handler.WriteTimeout,
+		&sync.Mutex{},
+		&sync.Mutex{},
 	}
 	handler.Listener.OnConnect(webSocketSession)
 	go handler.connectionLoop(webSocketSession)
@@ -162,6 +172,7 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 	if h, ok := handler.Listener.(KeepAliveMessageHandler); ok {
 		session.connection.SetPingHandler(func(pingData string) error {
+			session.resetReadTimeout()
 			err := h.OnPingMessage(session, pingData)
 			if err != nil {
 				zap.L().Error("handle ping message failed", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
@@ -176,15 +187,13 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 			return err
 		})
 		session.connection.SetPongHandler(func(pongData string) error {
+			session.resetReadTimeout()
 			return h.OnPongMessage(session, pongData)
 		})
 	}
 
 	for {
-		if handler.ReadTimeout > time.Duration(0) {
-			session.connection.SetReadDeadline(time.Now().Add(handler.ReadTimeout))
-		}
-
+		session.resetReadTimeout()
 		msgType, data, err := session.connection.ReadMessage()
 		if err != nil {
 			zap.L().Error("failed to read from ws peer", zap.Error(err), zap.String("remoteAddr", session.RemoteAddr))
