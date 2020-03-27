@@ -56,6 +56,11 @@ func (cluster *MyCluster) GetAnyPartition() *DbAccessor {
 	return cluster.partitions[cluster.rand.Intn(len(cluster.partitions))]
 }
 
+// GetPartitionByKey calculates the partition ID by the given partition key
+func (cluster *MyCluster) GetPartitionByKey(key string) int32 {
+	return cluster.partitionCalc.GetPartition(key)
+}
+
 // GetUniqueIDByName gets a unique id from cluster for the given entity name and partition
 func (cluster *MyCluster) GetUniqueIDByName(ctx context.Context, entityName string, partition int32) (int64, error) {
 	uniqueID, err := cluster.idGen.NextUniqueID(ctx, entityName, partition)
@@ -208,12 +213,11 @@ func (cluster *MyCluster) InsertToAll(ctx context.Context, entity interface{}) e
 	for i := 0; i < len(cluster.partitions); i = i + 1 {
 		_, err := txn.InsertAt(int32(i), entity)
 		if err != nil {
-			txn.MarkAsFaulted()
 			return err
 		}
 	}
 
-	return nil
+	return txn.Commit()
 }
 
 // UpdateToAll update entity to all partitions
@@ -227,12 +231,11 @@ func (cluster *MyCluster) UpdateToAll(ctx context.Context, entity interface{}) e
 	for i := 0; i < len(cluster.partitions); i = i + 1 {
 		_, err := txn.UpdateAt(int32(i), entity)
 		if err != nil {
-			txn.MarkAsFaulted()
 			return err
 		}
 	}
 
-	return nil
+	return txn.Commit()
 }
 
 // ExecuteOnAll execute query on all partitions
@@ -246,18 +249,16 @@ func (cluster *MyCluster) ExecuteOnAll(ctx context.Context, query string, args .
 	for i := 0; i < len(cluster.partitions); i = i + 1 {
 		t, err := txn.GetTxnByPartition(int32(i))
 		if err != nil {
-			txn.MarkAsFaulted()
 			return err
 		}
 
 		_, err = t.Execute(query, args...)
 		if err != nil {
-			txn.MarkAsFaulted()
 			return err
 		}
 	}
 
-	return nil
+	return txn.Commit()
 }
 
 // Delete delete the given entity

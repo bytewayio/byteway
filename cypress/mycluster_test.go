@@ -400,6 +400,7 @@ func TestClusterTxnWithSuccess(t *testing.T) {
 				return err
 			}
 
+			txn.Commit()
 			return nil
 		}()
 
@@ -458,7 +459,6 @@ func TestClusterTxnWithFailure(t *testing.T) {
 				return err
 			}
 
-			txn.MarkAsFaulted()
 			return nil
 		}()
 

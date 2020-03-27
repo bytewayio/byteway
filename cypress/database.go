@@ -9,6 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	txnStateUnknown = iota
+	txnStateCommitted
+	txnStateRollback
+)
+
 // Queryable a queryable object that could be a Connection, DB or Tx
 type Queryable interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
@@ -127,10 +133,10 @@ type Txn interface {
 
 // DbTxn db transaction wrapper with context
 type DbTxn struct {
-	conn   *sql.Conn
-	tx     *sql.Tx
-	ctx    context.Context
-	commit bool
+	conn  *sql.Conn
+	tx    *sql.Tx
+	ctx   context.Context
+	state int
 }
 
 // implement Txn for DbTxn
@@ -230,19 +236,29 @@ func (txn *DbTxn) QueryAll(query string, mapper RowMapper, args ...interface{}) 
 	return result, err
 }
 
-// Rollback set to rollback the transaction at close
-func (txn *DbTxn) Rollback() {
-	txn.commit = false
+// Rollback rollback the transaction
+func (txn *DbTxn) Rollback() error {
+	err := txn.tx.Rollback()
+	if err == nil {
+		txn.state = txnStateRollback
+	}
+
+	return err
+}
+
+// Commit commit the transaction
+func (txn *DbTxn) Commit() error {
+	err := txn.tx.Commit()
+	if err == nil {
+		txn.state = txnStateCommitted
+	}
+
+	return err
 }
 
 // Close commit or rollback transaction and close conn
 func (txn *DbTxn) Close() {
-	if txn.commit {
-		err := txn.tx.Commit()
-		if err != nil {
-			zap.L().Error("failed to commit transaction", zap.Error(err))
-		}
-	} else {
+	if txn.state == txnStateUnknown {
 		err := txn.tx.Rollback()
 		if err != nil {
 			zap.L().Error("failed to rollback transaction", zap.Error(err))
@@ -375,10 +391,10 @@ func (accessor *DbAccessor) BeginTxnWithIsolation(ctx context.Context, isolation
 	}
 
 	return &DbTxn{
-		conn:   conn,
-		tx:     tx,
-		ctx:    ctx,
-		commit: true,
+		conn:  conn,
+		tx:    tx,
+		ctx:   ctx,
+		state: txnStateUnknown,
 	}, nil
 }
 

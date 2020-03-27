@@ -265,13 +265,14 @@ func (xa *XATransaction) rollback() error {
 
 // Close release xa transaction
 func (xa *XATransaction) Close() {
-	xa.conn.Close()
 	if xa.state == XAStatePrepared {
 		xa.resolver.resolve(xa.id)
 	} else if xa.state == XAStateActive || xa.state == XAStateIdle {
 		err := xa.rollback()
 		zap.L().Error("failed to rollback faulted transaction", zap.Error(err), zap.String("txnID", xa.id))
 	}
+
+	xa.conn.Close()
 }
 
 // Insert insert entity to db
@@ -427,7 +428,6 @@ type MyClusterTxn struct {
 	participants map[int32]*XATransaction
 	idGen        UniqueIDGenerator
 	resolver     *unknownStateTxnResolver
-	faulted      bool
 }
 
 func newMyClusterTxn(
@@ -445,17 +445,11 @@ func newMyClusterTxn(
 		participants: make(map[int32]*XATransaction),
 		idGen:        idGen,
 		resolver:     resolver,
-		faulted:      false,
 	}
 }
 
-// MarkAsFaulted mark transaction as faulted so that it will be rollback
-func (txn *MyClusterTxn) MarkAsFaulted() {
-	txn.faulted = true
-}
-
 // Commit commit all participants
-func (txn *MyClusterTxn) commit() error {
+func (txn *MyClusterTxn) Commit() error {
 	for _, t := range txn.participants {
 		err := t.prepare()
 		if err != nil {
@@ -464,7 +458,7 @@ func (txn *MyClusterTxn) commit() error {
 	}
 
 	// mark for resolver in case of failure
-	_, err := txn.master.Execute(txn.ctx, "update `cluster_txn` set `state`=? where `id`=?", XAStateCommitted, txn.id)
+	_, err := txn.master.Execute(txn.ctx, "update `cluster_txn` set `state`=? where `id`=?", ClusterTxnStateCommitted, txn.id)
 	if err != nil {
 		return err
 	}
@@ -492,7 +486,7 @@ func (txn *MyClusterTxn) commit() error {
 }
 
 // Rollback rollback all participants
-func (txn *MyClusterTxn) rollback() error {
+func (txn *MyClusterTxn) Rollback() error {
 	for _, t := range txn.participants {
 		err := t.rollback()
 		if err != nil {
@@ -542,20 +536,6 @@ func (txn *MyClusterTxn) GetTxnByID(id int64) (*XATransaction, error) {
 
 // Close close and release all transactions
 func (txn *MyClusterTxn) Close() {
-	if !txn.faulted {
-		err := txn.commit()
-		if err != nil {
-			txn.faulted = true
-		}
-	}
-
-	if txn.faulted {
-		err := txn.rollback()
-		if err != nil {
-			zap.L().Error("failed to rollback transaction", zap.Error(err), zap.String("txnID", txn.id))
-		}
-	}
-
 	for _, t := range txn.participants {
 		t.Close()
 	}

@@ -295,6 +295,13 @@ func TestDbAccessorTxn(t *testing.T) {
 			failed = true
 			return
 		}
+
+		err = txn.Commit()
+		if err != nil {
+			t.Error("failed to commit transaction", err)
+			failed = true
+			return
+		}
 	}()
 
 	if failed {
