@@ -11,7 +11,7 @@ import (
 	"github.com/go-redis/redis"
 )
 
-type TestObj struct {
+type testObj struct {
 	ID   int32
 	Name string
 }
@@ -26,7 +26,7 @@ func TestFileSessionStore(t *testing.T) {
 	// setup the container
 	container := NewSessionID()
 	testDir := path.Join(os.TempDir(), container)
-	gob.Register(TestObj{})
+	gob.Register(testObj{})
 	err := os.Mkdir(testDir, os.ModePerm)
 	if err != nil {
 		t.Error("failed to create test folder", err)
@@ -59,7 +59,7 @@ func TestFileSessionStore(t *testing.T) {
 // however, please make sure redis server is started without any password and default port before
 // you run the test case
 func testRedisSessionStore(t *testing.T) {
-	gob.Register(TestObj{})
+	gob.Register(testObj{})
 	redisdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "", // no password set
@@ -73,7 +73,7 @@ func testRedisSessionStore(t *testing.T) {
 func testSessionStore(sessionStore SessionStore, t *testing.T) {
 	session := NewSession(NewSessionID())
 	session.SetValue("key1", "value1")
-	session.SetValue("key2", &TestObj{123, "abc"})
+	session.SetValue("key2", &testObj{123, "abc"})
 	if !session.NeedSave() {
 		t.Error("dirty flag is not set")
 		return
