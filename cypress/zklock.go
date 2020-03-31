@@ -127,7 +127,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 
 // Release release the lock, ignore all errors
 func (lock *ZkLock) Release() {
-	err := lock.conn.Delete(lock.path, 0)
+	err := lock.conn.Delete(lock.path, -1)
 	if err != nil {
 		zap.L().Error("failed to delete lock node", zap.String("path", lock.path), zap.Error(err))
 	}
