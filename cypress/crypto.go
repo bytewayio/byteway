@@ -81,7 +81,7 @@ func Aes256Decrypt(key, iv, data []byte) ([]byte, error) {
 	decrypted := make([]byte, len(data))
 	ecb.CryptBlocks(decrypted, data)
 
-	return pkcs5Trimming(decrypted), nil
+	return pkcs5Trimming(decrypted)
 }
 
 func pkcs5Padding(ciphertext []byte, blockSize int) []byte {
@@ -90,7 +90,11 @@ func pkcs5Padding(ciphertext []byte, blockSize int) []byte {
 	return append(ciphertext, padtext...)
 }
 
-func pkcs5Trimming(encrypt []byte) []byte {
-	padding := encrypt[len(encrypt)-1]
-	return encrypt[:len(encrypt)-int(padding)]
+func pkcs5Trimming(data []byte) ([]byte, error) {
+	padding := data[len(data)-1]
+	if padding < 0 || int(padding) >= len(data) {
+		return nil, errors.New("bad padding")
+	}
+
+	return data[:len(data)-int(padding)], nil
 }
