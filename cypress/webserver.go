@@ -130,6 +130,7 @@ type WebServer struct {
 	captchaWidth       int
 	captchaHeight      int
 	requestTimeout     int
+	cors               func(http.Handler) http.Handler
 }
 
 // SendError complete the request by sending an error message to the client
@@ -398,6 +399,12 @@ func (server *WebServer) WithSessionOptions(store SessionStore, timeout time.Dur
 	return server
 }
 
+// WithCORS setup cors handler for the web server
+func (server *WebServer) WithCORS(handler func(http.Handler) http.Handler) *WebServer {
+	server.cors = handler
+	return server
+}
+
 // Shutdown shutdown the web server
 func (server *WebServer) Shutdown() {
 	server.server.Shutdown(nil)
@@ -426,6 +433,10 @@ func (server *WebServer) Start() error {
 
 	handler = LoggingHandler(handler)
 	handler = handlers.ProxyHeaders(handler)
+	if server.cors != nil {
+		handler = server.cors(handler)
+	}
+
 	http.Handle("/", handler)
 	return server.server.ListenAndServe()
 }

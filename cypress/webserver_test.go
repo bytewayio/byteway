@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/websocket"
 )
 
@@ -98,7 +99,7 @@ func (l *TestWsListener) OnPongMessage(session *WebSocketSession, text string) e
 
 func testActions(t *testing.T) []Action {
 	actions := []Action{
-		Action{
+		{
 			Name: "greeting",
 			Handler: ActionHandler(func(r *http.Request, response *Response) {
 				response.DoneWithContent(http.StatusAccepted, "text/html", []byte(fmt.Sprintf("<h1>Hello, %s</h1>", r.URL.String())))
@@ -111,7 +112,7 @@ func testActions(t *testing.T) []Action {
 				}
 			}),
 		},
-		Action{
+		{
 			Name: "timeout",
 			Handler: ActionHandler(func(r *http.Request, response *Response) {
 				var requestDone uint32
@@ -131,13 +132,13 @@ func testActions(t *testing.T) []Action {
 				}
 			}),
 		},
-		Action{
+		{
 			Name: "panic",
 			Handler: ActionHandler(func(r *http.Request, response *Response) {
 				panic("ask for panic")
 			}),
 		},
-		Action{
+		{
 			Name: "index",
 			Handler: ActionHandler(func(request *http.Request, response *Response) {
 				model := &TestModel{
@@ -229,6 +230,7 @@ func TestWebServer(t *testing.T) {
 	server.RegisterController("test1", AsController(&TestController{}))
 	server.WithCustomHandler(CustomHandlerFunc(printSessionID))
 	server.WithCustomHandler(CustomHandlerFunc(printSessionIDEx))
+	server.WithCORS(handlers.CORS(handlers.AllowedOrigins([]string{"*"}), handlers.AllowedMethods([]string{"*"})))
 
 	startedChan := make(chan bool)
 	go func() {
@@ -495,4 +497,33 @@ func TestWebServer(t *testing.T) {
 
 	go c.ReadMessage()
 	<-pongC
+
+	req, err := http.NewRequest("GET", "http://localhost:8099/web/test/index", nil)
+	if err != nil {
+		t.Error("failed to create request", err.Error())
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	req.Header.Add("Origin", "https://www.google.com")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error("failed to send request", err.Error())
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		t.Error("getting a non ok request from server")
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	allowedOrigin := resp.Header.Get("Access-Control-Allow-Origin")
+	if allowedOrigin != "*" {
+		t.Error("expect * as allowed origin but got", allowedOrigin)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
 }
