@@ -425,7 +425,7 @@ type MyClusterTxn struct {
 	ctx          context.Context
 	master       *DbAccessor
 	partitions   []*DbAccessor
-	participants map[int32]*XATransaction
+	participants map[int]*XATransaction
 	idGen        UniqueIDGenerator
 	resolver     *unknownStateTxnResolver
 }
@@ -442,7 +442,7 @@ func newMyClusterTxn(
 		ctx:          ctx,
 		master:       master,
 		partitions:   partitions,
-		participants: make(map[int32]*XATransaction),
+		participants: make(map[int]*XATransaction),
 		idGen:        idGen,
 		resolver:     resolver,
 	}
@@ -510,23 +510,24 @@ func (txn *MyClusterTxn) Rollback() error {
 
 // GetTxnByPartition get an XATransaction by partition number
 func (txn *MyClusterTxn) GetTxnByPartition(partition int32) (*XATransaction, error) {
-	t, ok := txn.participants[partition]
+	physicalPartition := int(partition) % len(txn.partitions)
+	t, ok := txn.participants[physicalPartition]
 	if ok {
 		return t, nil
 	}
 
-	_, err := txn.master.Execute(txn.ctx, "insert into `txn_participant`(`txn_id`, `partition`) values(?, ?)", txn.id, partition)
+	_, err := txn.master.Execute(txn.ctx, "insert into `txn_participant`(`txn_id`, `partition`) values(?, ?)", txn.id, physicalPartition)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := txn.partitions[int(partition)%len(txn.partitions)].Conn(txn.ctx)
+	conn, err := txn.partitions[physicalPartition].Conn(txn.ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	txn.participants[partition] = newXATransaction(txn.ctx, fmt.Sprintf("'%v','%v'", txn.id, partition), conn, txn.resolver)
-	return txn.participants[partition], nil
+	txn.participants[physicalPartition] = newXATransaction(txn.ctx, fmt.Sprintf("'%v','%v'", txn.id, physicalPartition), conn, txn.resolver)
+	return txn.participants[physicalPartition], nil
 }
 
 // GetTxnByID get an XATransaction by unique ID
@@ -567,6 +568,20 @@ func (txn *MyClusterTxn) InsertAt(partition int32, entity interface{}) (sql.Resu
 	return xa.Insert(entity)
 }
 
+// InsertToAll insert an entry to all partitions
+func (txn *MyClusterTxn) InsertToAll(entity interface{}) ([]sql.Result, error) {
+	results := make([]sql.Result, len(txn.partitions))
+	var err error
+	for i := range txn.partitions {
+		results[i], err = txn.InsertAt(int32(i), entity)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
 // Update update entity to database
 func (txn *MyClusterTxn) Update(entity interface{}) (sql.Result, error) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
@@ -601,4 +616,92 @@ func (txn *MyClusterTxn) UpdateAt(partition int32, entity interface{}) (sql.Resu
 	}
 
 	return xa.Update(entity)
+}
+
+// UpdateToAll update entity to all partitions
+func (txn *MyClusterTxn) UpdateToAll(entity interface{}) ([]sql.Result, error) {
+	results := make([]sql.Result, len(txn.partitions))
+	var err error
+	for i := range txn.partitions {
+		results[i], err = txn.UpdateAt(int32(i), entity)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
+// Delete delete the entity from database
+func (txn *MyClusterTxn) Delete(entity interface{}) (sql.Result, error) {
+	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
+	if descriptor.key != nil {
+		v := reflect.ValueOf(entity)
+		for v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+
+		f := v.FieldByIndex(descriptor.key.field.field.Index)
+		k, ok := f.Interface().(int64)
+		if !ok {
+			return nil, errors.New("Not able to update entity with non unique id key")
+		}
+
+		xa, err := txn.GetTxnByID(k)
+		if err != nil {
+			return nil, err
+		}
+
+		return xa.Delete(entity)
+	}
+
+	return nil, errors.New("Not able to update entity that does not have a key")
+}
+
+// DeleteAt delete the specified entry from the given partition
+func (txn *MyClusterTxn) DeleteAt(partition int32, entity interface{}) (sql.Result, error) {
+	xa, err := txn.GetTxnByPartition(partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return xa.Delete(entity)
+}
+
+// DeleteFromAll delete the entry from all partitions
+func (txn *MyClusterTxn) DeleteFromAll(entity interface{}) ([]sql.Result, error) {
+	results := make([]sql.Result, len(txn.partitions))
+	var err error
+	for i := range txn.partitions {
+		results[i], err = txn.DeleteAt(int32(i), entity)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
+// ExecuteAt execute the given query on a specific partition
+func (txn *MyClusterTxn) ExecuteAt(partition int32, sql string, args ...interface{}) (sql.Result, error) {
+	tx, err := txn.GetTxnByPartition(partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx.Execute(sql, args...)
+}
+
+// ExecuteOnAll execute the given query on all partitions
+func (txn *MyClusterTxn) ExecuteOnAll(query string, args ...interface{}) ([]sql.Result, error) {
+	var err error
+	results := make([]sql.Result, len(txn.partitions))
+	for i := range txn.partitions {
+		results[i], err = txn.ExecuteAt(int32(i), query, args...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
 }
