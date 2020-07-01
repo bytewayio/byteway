@@ -206,7 +206,10 @@ func (xa *XATransaction) execXACommand(command string) error {
 // Begin begins the transaction
 func (xa *XATransaction) Begin() error {
 	err := xa.execXACommand("XA START " + xa.id)
-	xa.state = XAStateActive
+	if err == nil {
+		xa.state = XAStateActive
+	}
+
 	return err
 }
 
@@ -235,9 +238,12 @@ func (xa *XATransaction) commit() error {
 		return errors.New("commit is not allowed in this state " + strconv.Itoa(xa.state))
 	}
 
-	xa.execXACommand("XA COMMIT " + xa.id)
-	xa.state = XAStateCommitted
-	return nil
+	err := xa.execXACommand("XA COMMIT " + xa.id)
+	if err == nil {
+		xa.state = XAStateCommitted
+	}
+
+	return err
 }
 
 func (xa *XATransaction) rollback() error {
@@ -258,9 +264,12 @@ func (xa *XATransaction) rollback() error {
 		return errors.New("rollback is not allowed in this state " + strconv.Itoa(xa.state))
 	}
 
-	xa.execXACommand("XA ROLLBACK " + xa.id)
-	xa.state = XAStateRollback
-	return nil
+	err := xa.execXACommand("XA ROLLBACK " + xa.id)
+	if err == nil {
+		xa.state = XAStateRollback
+	}
+
+	return err
 }
 
 // Close release xa transaction
