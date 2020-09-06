@@ -180,7 +180,7 @@ func TestDbAccessor(t *testing.T) {
 		return
 	}
 
-	one, err := accessor.GetOne(context.Background(), entity, 200)
+	one, err := accessor.GetOne(context.Background(), entity)
 	if err != nil {
 		t.Error("failed to get one from db", err)
 		return
@@ -262,7 +262,7 @@ func TestDbAccessorTxn(t *testing.T) {
 	}
 
 	// last txn has rollbacked, so there is no entity with id 200
-	one, err := accessor.GetOne(context.Background(), &testEntity{}, 200)
+	one, err := accessor.GetOne(context.Background(), &testEntity{ID: 200})
 	if err != nil {
 		t.Error("failed to get one from db", err)
 		return
@@ -309,7 +309,7 @@ func TestDbAccessorTxn(t *testing.T) {
 	}
 
 	// last txn has rollbacked, so there is no entity with id 200
-	one, err = accessor.GetOne(context.Background(), &testEntity{}, 200)
+	one, err = accessor.GetOne(context.Background(), &testEntity{ID: 200})
 	if err != nil {
 		t.Error("failed to get one from db", err)
 		return

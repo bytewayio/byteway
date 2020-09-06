@@ -3,6 +3,7 @@ package cypress
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -44,6 +45,12 @@ const (
 	create table no_key_entity (
 		id varchar(40) not null primary key,
 		value varchar(100) not null
+	) engine=InnoDB;
+	create table multi_key_entity (
+		key1 varchar(40) not null,
+		key2 varchar(40) not null,
+		value varchar(100) not null,
+		primary key (key1, key2)
 	) engine=InnoDB;`
 )
 
@@ -158,6 +165,12 @@ type noKeyEntity struct {
 	NonExist string `alias:"no_exist"`
 }
 
+type multiKeyEntity struct {
+	Key1  string `col:"key1" dtags:"multikey"`
+	Key2  string `col:"key2" dtags:"multikey,partition"`
+	Value string `col:"value"`
+}
+
 func TestMyClusterInsert(t *testing.T) {
 	runClusterTest(t, func(cluster *MyCluster) error {
 		b := &balance{
@@ -200,7 +213,7 @@ func TestClusterDeleteByKey(t *testing.T) {
 			return err
 		}
 
-		item, err := cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b, b.ID)
+		item, err := cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b)
 		if err != nil {
 			return err
 		}
@@ -225,7 +238,7 @@ func TestClusterUpdate(t *testing.T) {
 			return err
 		}
 
-		item, err := cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b, b.ID)
+		item, err := cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b)
 		if err != nil {
 			return err
 		}
@@ -242,7 +255,7 @@ func TestClusterUpdate(t *testing.T) {
 			return err
 		}
 
-		item, err = cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b, b.ID)
+		item, err = cluster.GetDbAccessorByID(b.ID).GetOne(context.Background(), b)
 		if err != nil {
 			return err
 		}
@@ -268,7 +281,7 @@ func TestClusterNonAutoGenInsert(t *testing.T) {
 			return err
 		}
 
-		item, err := cluster.GetDbAccessor(7).GetOne(context.Background(), entity, entity.Key)
+		item, err := cluster.GetDbAccessor(7).GetOne(context.Background(), entity)
 		if err != nil {
 			return err
 		}
@@ -293,7 +306,7 @@ func TestClusterNonAutoGenUpdate(t *testing.T) {
 			return err
 		}
 
-		item, err := cluster.GetDbAccessor(7).GetOne(context.Background(), entity, entity.Key)
+		item, err := cluster.GetDbAccessor(7).GetOne(context.Background(), entity)
 		if err != nil {
 			return err
 		}
@@ -305,7 +318,7 @@ func TestClusterNonAutoGenUpdate(t *testing.T) {
 			return err
 		}
 
-		item, err = cluster.GetDbAccessor(7).GetOne(context.Background(), entity, entity.Key)
+		item, err = cluster.GetDbAccessor(7).GetOne(context.Background(), entity)
 		if err != nil {
 			return err
 		}
@@ -483,6 +496,69 @@ func TestClusterTxnWithFailure(t *testing.T) {
 
 		if count != 0 {
 			t.Error("unexpected number of entities", count)
+		}
+
+		return nil
+	})
+}
+
+func TestMultiKeyCURD(t *testing.T) {
+	runClusterTest(t, func(cluster *MyCluster) error {
+		entity := &multiKeyEntity{
+			Key1:  "key1",
+			Key2:  "key2",
+			Value: "value",
+		}
+		err := cluster.Insert(context.Background(), entity)
+		if err != nil {
+			t.Error("failed to insert entity", err)
+			return err
+		}
+
+		all, err := cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(&multiKeyEntity{}))
+		if err != nil {
+			return err
+		}
+
+		if len(all) != 1 {
+			t.Error("unexpected number of rows", len(all))
+			return errors.New("unexpected number of rows")
+		}
+
+		entity = all[0].(*multiKeyEntity)
+		entity.Value = "value1"
+		_, err = cluster.GetDbAccessorByKey("key2").Update(context.Background(), entity)
+		if err != nil {
+			return err
+		}
+
+		value, err := cluster.GetDbAccessorByKey("key2").GetOne(context.Background(), &multiKeyEntity{Key1: "key1", Key2: "key2"})
+		if err != nil {
+			return err
+		}
+
+		if value == nil {
+			return errors.New("unexpected nil value")
+		}
+
+		entity = value.(*multiKeyEntity)
+		if entity.Value != "value1" {
+			return errors.New("Unexpected value " + entity.Value)
+		}
+
+		_, err = cluster.GetDbAccessorByKey("key2").Delete(context.Background(), entity)
+		if err != nil {
+			return err
+		}
+
+		all, err = cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(&multiKeyEntity{}))
+		if err != nil {
+			return err
+		}
+
+		if len(all) != 0 {
+			t.Error("unexpected number of rows", len(all))
+			return errors.New("unexpected number of rows")
 		}
 
 		return nil

@@ -163,7 +163,7 @@ func (txn *DbTxn) Update(entity interface{}) (sql.Result, error) {
 	LogOperation(txn.ctx, "Update"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
-		args = append(args, ed.GetKeyValue(entity))
+		args = append(args, ed.GetKeyValues(entity)...)
 		r, err = txn.tx.ExecContext(txn.ctx, ed.UpdateSQL, args...)
 		return err
 	})
@@ -178,7 +178,7 @@ func (txn *DbTxn) Delete(entity interface{}) (sql.Result, error) {
 	var err error
 	LogOperation(txn.ctx, "Delete"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
-		r, err = txn.tx.ExecContext(txn.ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
+		r, err = txn.tx.ExecContext(txn.ctx, ed.DeleteSQL, ed.GetKeyValues(entity)...)
 		return err
 	})
 
@@ -303,7 +303,7 @@ func (accessor *DbAccessor) Update(ctx context.Context, entity interface{}) (sql
 	LogOperation(ctx, "Update"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
-		args = append(args, ed.GetKeyValue(entity))
+		args = append(args, ed.GetKeyValues(entity)...)
 		r, err = accessor.db.ExecContext(ctx, ed.UpdateSQL, args...)
 		return err
 	})
@@ -318,7 +318,7 @@ func (accessor *DbAccessor) Delete(ctx context.Context, entity interface{}) (sql
 	var err error
 	LogOperation(ctx, "Delete"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
-		r, err = accessor.db.ExecContext(ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
+		r, err = accessor.db.ExecContext(ctx, ed.DeleteSQL, ed.GetKeyValues(entity)...)
 		return err
 	})
 
@@ -338,14 +338,14 @@ func (accessor *DbAccessor) Execute(ctx context.Context, command string, args ..
 }
 
 // GetOne query one entity based on the prototype
-func (accessor *DbAccessor) GetOne(ctx context.Context, proto interface{}, id interface{}) (interface{}, error) {
+func (accessor *DbAccessor) GetOne(ctx context.Context, proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
 	LogOperation(ctx, "GetOne"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
-		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, id)
+		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, ed.GetKeyValues(proto)...)
 		return err
 	})
 

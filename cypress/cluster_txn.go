@@ -214,6 +214,10 @@ func (xa *XATransaction) Begin() error {
 }
 
 func (xa *XATransaction) prepare() error {
+	if xa.state == XAStateUnknown {
+		return nil // nothing to commit
+	}
+
 	if xa.state != XAStateActive {
 		return errors.New("prepare is not allowed in this state" + strconv.Itoa(xa.state))
 	}
@@ -234,6 +238,10 @@ func (xa *XATransaction) prepare() error {
 }
 
 func (xa *XATransaction) commit() error {
+	if xa.state == XAStateUnknown {
+		return nil // nothing to commit
+	}
+
 	if xa.state != XAStatePrepared {
 		return errors.New("commit is not allowed in this state " + strconv.Itoa(xa.state))
 	}
@@ -320,7 +328,7 @@ func (xa *XATransaction) Update(entity interface{}) (sql.Result, error) {
 
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
-		args = append(args, ed.GetKeyValue(entity))
+		args = append(args, ed.GetKeyValues(entity)...)
 		r, err = xa.conn.ExecContext(xa.ctx, ed.UpdateSQL, args...)
 		return err
 	})
@@ -342,7 +350,7 @@ func (xa *XATransaction) Delete(entity interface{}) (sql.Result, error) {
 		}
 
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
-		r, err = xa.conn.ExecContext(xa.ctx, ed.DeleteSQL, ed.GetKeyValue(entity))
+		r, err = xa.conn.ExecContext(xa.ctx, ed.DeleteSQL, ed.GetKeyValues(entity)...)
 		return err
 	})
 
@@ -369,7 +377,7 @@ func (xa *XATransaction) Execute(command string, args ...interface{}) (sql.Resul
 }
 
 // GetOne query one entity based on the prototype
-func (xa *XATransaction) GetOne(proto interface{}, id interface{}) (interface{}, error) {
+func (xa *XATransaction) GetOne(proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
 	mapper := NewSmartMapper(proto)
 	var result interface{}
@@ -383,7 +391,7 @@ func (xa *XATransaction) GetOne(proto interface{}, id interface{}) (interface{},
 		}
 
 		ed := GetOrCreateEntityDescriptor(ty)
-		result, err = QueryOne(xa.ctx, xa.conn, mapper, ed.GetOneSQL, id)
+		result, err = QueryOne(xa.ctx, xa.conn, mapper, ed.GetOneSQL, ed.GetKeyValues(proto)...)
 		return err
 	})
 

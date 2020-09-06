@@ -1,8 +1,9 @@
 package cypress
 
-import "reflect"
-
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 var (
 	//EntityToTableNameMapper entity name to table name mapper
@@ -36,6 +37,7 @@ type EntityDescriptor struct {
 	entityType   reflect.Type
 	tableName    string
 	key          *keyInfo
+	multiKeys    []*fieldInfo
 	partitionKey *fieldInfo
 	fields       []*fieldInfo
 	insertFields []*fieldInfo
@@ -49,6 +51,7 @@ type EntityDescriptor struct {
 func newEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 	return &EntityDescriptor{
 		entityType:   entityType,
+		multiKeys:    make([]*fieldInfo, 0),
 		fields:       make([]*fieldInfo, 0, 10),
 		insertFields: make([]*fieldInfo, 0, 10),
 		updateFields: make([]*fieldInfo, 0, 10),
@@ -93,13 +96,13 @@ func (descriptor *EntityDescriptor) GetUpdateValues(entity interface{}) []interf
 	return result
 }
 
-// GetKeyValue get key value for the given entity
-func (descriptor *EntityDescriptor) GetKeyValue(entity interface{}) interface{} {
+// GetKeyValues get key value for the given entity
+func (descriptor *EntityDescriptor) GetKeyValues(entity interface{}) []interface{} {
 	if entity == nil {
 		panic("not able to get key value for nil entity")
 	}
 
-	if descriptor.key == nil || descriptor.key.field == nil {
+	if (descriptor.key == nil || descriptor.key.field == nil) && len(descriptor.multiKeys) == 0 {
 		return nil
 	}
 
@@ -108,7 +111,17 @@ func (descriptor *EntityDescriptor) GetKeyValue(entity interface{}) interface{} 
 		value = value.Elem()
 	}
 
-	return value.FieldByIndex(descriptor.key.field.field.Index).Interface()
+	if descriptor.key != nil {
+		keyValue := value.FieldByIndex(descriptor.key.field.field.Index).Interface()
+		return []interface{}{keyValue}
+	}
+
+	keyValues := make([]interface{}, 0, len(descriptor.multiKeys))
+	for _, k := range descriptor.multiKeys {
+		keyValues = append(keyValues, value.FieldByIndex(k.field.Index).Interface())
+	}
+
+	return keyValues
 }
 
 func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
@@ -136,7 +149,7 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 			return false
 		}
 
-		// valid tags: alias, noupdate, key, nogen, autoinc, partition
+		// valid tags: alias, noupdate, key, nogen, autoinc, partition,multikey
 		alias := hasTag("alias")
 		name := field.Tag.Get("alias")
 		if name == "" {
@@ -165,6 +178,8 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 					field:   fi,
 					autoGen: !hasTag("nogen"),
 				}
+			} else if hasTag("multikey") {
+				descriptor.multiKeys = append(descriptor.multiKeys, fi)
 			} else if !hasTag("noupdate") {
 				descriptor.updateFields = append(descriptor.updateFields, fi)
 			}
@@ -179,9 +194,20 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 		}
 	}
 
-	if descriptor.key != nil {
-		descriptor.DeleteSQL = "delete from " + quoteIdentifier(descriptor.tableName) +
-			" where " + quoteIdentifier(descriptor.key.field.column) + "=?"
+	if descriptor.key != nil || len(descriptor.multiKeys) > 0 {
+		whereClause := " where "
+		if descriptor.key != nil {
+			whereClause += quoteIdentifier(descriptor.key.field.column) + "=?"
+		} else {
+			conditions := make([]string, 0, len(descriptor.multiKeys))
+			for _, k := range descriptor.multiKeys {
+				conditions = append(conditions, quoteIdentifier(k.column)+"=?")
+			}
+
+			whereClause += strings.Join(conditions, " and ")
+		}
+
+		descriptor.DeleteSQL = "delete from " + quoteIdentifier(descriptor.tableName) + whereClause
 		first := true
 		descriptor.UpdateSQL = "update " + quoteIdentifier(descriptor.tableName) + " set "
 		for _, fi := range descriptor.updateFields {
@@ -194,8 +220,8 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 			descriptor.UpdateSQL += quoteIdentifier(fi.column) + "=?"
 		}
 
-		descriptor.UpdateSQL += " where " + quoteIdentifier(descriptor.key.field.column) + "=?"
-		descriptor.GetOneSQL = "select * from " + quoteIdentifier(descriptor.tableName) + " where " + quoteIdentifier(descriptor.key.field.column) + "=?"
+		descriptor.UpdateSQL += whereClause
+		descriptor.GetOneSQL = "select * from " + quoteIdentifier(descriptor.tableName) + whereClause
 	}
 
 	params := ""

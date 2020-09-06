@@ -407,7 +407,7 @@ func (server *WebServer) WithCORS(handler func(http.Handler) http.Handler) *WebS
 
 // Shutdown shutdown the web server
 func (server *WebServer) Shutdown() {
-	server.server.Shutdown(nil)
+	server.server.Shutdown(context.Background())
 }
 
 // Start starts the web server
