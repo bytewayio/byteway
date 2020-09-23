@@ -124,7 +124,9 @@ type Txn interface {
 
 	Execute(sql string, args ...interface{}) (sql.Result, error)
 
-	GetOne(proto interface{}, id interface{}) (interface{}, error)
+	GetOneByKey(proto interface{}, id interface{}) (interface{}, error)
+
+	GetOne(proto interface{}) (interface{}, error)
 
 	QueryOne(sql string, mapper RowMapper, args ...interface{}) (interface{}, error)
 
@@ -197,15 +199,30 @@ func (txn *DbTxn) Execute(command string, args ...interface{}) (sql.Result, erro
 	return r, err
 }
 
-// GetOne query one entity based on the prototype
-func (txn *DbTxn) GetOne(proto interface{}, id interface{}) (interface{}, error) {
+// GetOneByKey query one entity based on the key, the entity must have a sinle dimension key
+func (txn *DbTxn) GetOneByKey(proto interface{}, id interface{}) (interface{}, error) {
+	ty := reflect.TypeOf(proto)
+	mapper := NewSmartMapper(proto)
+	var result interface{}
+	var err error
+	LogOperation(txn.ctx, "GetOneByKey"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(ty)
+		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, id)
+		return err
+	})
+
+	return result, err
+}
+
+// GetOne query one entity based on the key fields set in the prototype
+func (txn *DbTxn) GetOne(proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
 	LogOperation(txn.ctx, "GetOne"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
-		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, id)
+		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, ed.GetKeyValues(proto)...)
 		return err
 	})
 
@@ -335,6 +352,21 @@ func (accessor *DbAccessor) Execute(ctx context.Context, command string, args ..
 	})
 
 	return r, err
+}
+
+// GetOneByKey query one entity based on the given key, the entity must have a single dimension primary key
+func (accessor *DbAccessor) GetOneByKey(ctx context.Context, proto interface{}, key interface{}) (interface{}, error) {
+	ty := reflect.TypeOf(proto)
+	mapper := NewSmartMapper(proto)
+	var result interface{}
+	var err error
+	LogOperation(ctx, "GetOneByKey"+ty.Name(), func() error {
+		ed := GetOrCreateEntityDescriptor(ty)
+		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, key)
+		return err
+	})
+
+	return result, err
 }
 
 // GetOne query one entity based on the prototype
