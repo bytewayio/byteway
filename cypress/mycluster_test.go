@@ -472,12 +472,12 @@ func TestClusterTxnWithFailure(t *testing.T) {
 				return err
 			}
 
-			t, err := txn.GetTxnByPartition(cluster.GetPartitionByKey("test1"))
+			t, err := txn.GetTxnByPartition(GetPartitionKey(b1.ID))
 			if err != nil {
 				return err
 			}
 
-			b, err := t.GetOneByKey(b1, "test1")
+			b, err := t.GetOneByKey(b1, b1.ID)
 			if err != nil {
 				return err
 			}
