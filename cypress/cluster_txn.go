@@ -376,7 +376,29 @@ func (xa *XATransaction) Execute(command string, args ...interface{}) (sql.Resul
 	return r, err
 }
 
-// GetOne query one entity based on the prototype
+// GetOneByKey query one entity based on the prototype and the single dimension key
+func (xa *XATransaction) GetOneByKey(proto interface{}, key interface{}) (interface{}, error) {
+	ty := reflect.TypeOf(proto)
+	mapper := NewSmartMapper(proto)
+	var result interface{}
+	var err error
+	LogOperation(xa.ctx, "GetOneByKey"+ty.Name(), func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
+		ed := GetOrCreateEntityDescriptor(ty)
+		result, err = QueryOne(xa.ctx, xa.conn, mapper, ed.GetOneSQL, key)
+		return err
+	})
+
+	return result, err
+}
+
+// GetOne query one entity based on the keys in prototype
 func (xa *XATransaction) GetOne(proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
 	mapper := NewSmartMapper(proto)

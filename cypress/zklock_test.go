@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samuel/go-zookeeper/zk"
+	"github.com/go-zookeeper/zk"
 )
 
 func TestZkLockRelease(t *testing.T) {

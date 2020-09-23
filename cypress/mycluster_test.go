@@ -472,6 +472,20 @@ func TestClusterTxnWithFailure(t *testing.T) {
 				return err
 			}
 
+			t, err := txn.GetTxnByPartition(cluster.GetPartitionByKey("test1"))
+			if err != nil {
+				return err
+			}
+
+			b, err := t.GetOneByKey(b1, "test1")
+			if err != nil {
+				return err
+			}
+
+			if b == nil {
+				return errors.New("object not found after insert")
+			}
+
 			return nil
 		}()
 

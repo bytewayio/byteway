@@ -15,9 +15,9 @@ require (
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da
 	github.com/stretchr/testify v1.5.1 // indirect
 	go.uber.org/zap v1.14.1
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
+	github.com/go-zookeeper/zk v1.0.2
 )
