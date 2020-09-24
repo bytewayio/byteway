@@ -1,9 +1,10 @@
 package cypress
 
 import (
+	"context"
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 )
 
 type redisSessionStore struct {
@@ -22,19 +23,23 @@ func (store *redisSessionStore) Close() {
 
 // Save implements SessionStore's Save api, store the session data into redis
 func (store *redisSessionStore) Save(session *Session, timeout time.Duration) error {
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelFunc()
 	if !session.IsValid {
-		status := store.redisDb.Del(session.ID)
+		status := store.redisDb.Del(ctx, session.ID)
 		return status.Err()
 	}
 
 	data := session.Serialize()
-	status := store.redisDb.Set(session.ID, data, timeout)
+	status := store.redisDb.Set(ctx, session.ID, data, timeout)
 	return status.Err()
 }
 
 // Get implements SessionStore's Get api, retrieves session from redis by given id
 func (store *redisSessionStore) Get(id string) (*Session, error) {
-	status := store.redisDb.Get(id)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelFunc()
+	status := store.redisDb.Get(ctx, id)
 	if status.Err() != nil {
 		return nil, ErrSessionNotFound
 	}
