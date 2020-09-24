@@ -148,6 +148,10 @@ func (txn *DbTxn) Insert(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(txn.ctx, "Insert"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = txn.tx.ExecContext(txn.ctx, ed.InsertSQL, ed.GetInsertValues(entity)...)
@@ -162,6 +166,10 @@ func (txn *DbTxn) Update(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(txn.ctx, "Update"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
@@ -178,6 +186,10 @@ func (txn *DbTxn) Delete(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(txn.ctx, "Delete"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = txn.tx.ExecContext(txn.ctx, ed.DeleteSQL, ed.GetKeyValues(entity)...)
@@ -205,6 +217,10 @@ func (txn *DbTxn) GetOneByKey(proto interface{}, id interface{}) (interface{}, e
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(txn.ctx, "GetOneByKey"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
 		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, id)
@@ -220,6 +236,10 @@ func (txn *DbTxn) GetOne(proto interface{}) (interface{}, error) {
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(txn.ctx, "GetOne"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
 		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, ed.GetKeyValues(proto)...)
@@ -303,6 +323,10 @@ func (accessor *DbAccessor) Insert(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(ctx, "Insert"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = accessor.db.ExecContext(ctx, ed.InsertSQL, ed.GetInsertValues(entity)...)
@@ -317,6 +341,10 @@ func (accessor *DbAccessor) Update(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(ctx, "Update"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		args := ed.GetUpdateValues(entity)
@@ -333,6 +361,10 @@ func (accessor *DbAccessor) Delete(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(ctx, "Delete"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 		r, err = accessor.db.ExecContext(ctx, ed.DeleteSQL, ed.GetKeyValues(entity)...)
@@ -360,6 +392,10 @@ func (accessor *DbAccessor) GetOneByKey(ctx context.Context, proto interface{}, 
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(ctx, "GetOneByKey"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
 		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, key)
@@ -375,6 +411,10 @@ func (accessor *DbAccessor) GetOne(ctx context.Context, proto interface{}) (inte
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(ctx, "GetOne"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
 		result, err = QueryOne(ctx, accessor.db, mapper, ed.GetOneSQL, ed.GetKeyValues(proto)...)

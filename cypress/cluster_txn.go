@@ -297,6 +297,10 @@ func (xa *XATransaction) Insert(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(xa.ctx, "Insert"+ty.Name(), func() error {
 		if xa.state == XAStateUnknown {
 			e := xa.Begin()
@@ -318,6 +322,10 @@ func (xa *XATransaction) Update(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(xa.ctx, "Update"+ty.Name(), func() error {
 		if xa.state == XAStateUnknown {
 			e := xa.Begin()
@@ -341,6 +349,10 @@ func (xa *XATransaction) Delete(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(xa.ctx, "Delete"+ty.Name(), func() error {
 		if xa.state == XAStateUnknown {
 			e := xa.Begin()
@@ -382,6 +394,10 @@ func (xa *XATransaction) GetOneByKey(proto interface{}, key interface{}) (interf
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(xa.ctx, "GetOneByKey"+ty.Name(), func() error {
 		if xa.state == XAStateUnknown {
 			e := xa.Begin()
@@ -404,6 +420,10 @@ func (xa *XATransaction) GetOne(proto interface{}) (interface{}, error) {
 	mapper := NewSmartMapper(proto)
 	var result interface{}
 	var err error
+	if ty.Kind() == reflect.Ptr {
+		ty = ty.Elem()
+	}
+
 	LogOperation(xa.ctx, "GetOne"+ty.Name(), func() error {
 		if xa.state == XAStateUnknown {
 			e := xa.Begin()
