@@ -460,13 +460,14 @@ func (xa *XATransaction) QueryAll(query string, mapper RowMapper, args ...interf
 
 // MyClusterTxn cluster supported 2PC transaction
 type MyClusterTxn struct {
-	id           string
-	ctx          context.Context
-	master       *DbAccessor
-	partitions   []*DbAccessor
-	participants map[int]*XATransaction
-	idGen        UniqueIDGenerator
-	resolver     *unknownStateTxnResolver
+	id            string
+	ctx           context.Context
+	master        *DbAccessor
+	partitions    []*DbAccessor
+	participants  map[int]*XATransaction
+	idGen         UniqueIDGenerator
+	resolver      *unknownStateTxnResolver
+	partitionCalc PartitionCalculator
 }
 
 func newMyClusterTxn(
@@ -475,15 +476,17 @@ func newMyClusterTxn(
 	master *DbAccessor,
 	partitions []*DbAccessor,
 	idGen UniqueIDGenerator,
+	partitionCalc PartitionCalculator,
 	resolver *unknownStateTxnResolver) *MyClusterTxn {
 	return &MyClusterTxn{
-		id:           id,
-		ctx:          ctx,
-		master:       master,
-		partitions:   partitions,
-		participants: make(map[int]*XATransaction),
-		idGen:        idGen,
-		resolver:     resolver,
+		id:            id,
+		ctx:           ctx,
+		master:        master,
+		partitions:    partitions,
+		participants:  make(map[int]*XATransaction),
+		idGen:         idGen,
+		resolver:      resolver,
+		partitionCalc: partitionCalc,
 	}
 }
 
@@ -624,27 +627,18 @@ func (txn *MyClusterTxn) InsertToAll(entity interface{}) ([]sql.Result, error) {
 // Update update entity to database
 func (txn *MyClusterTxn) Update(entity interface{}) (sql.Result, error) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
-	if descriptor.key != nil {
-		v := reflect.ValueOf(entity)
-		for v.Kind() == reflect.Ptr {
-			v = v.Elem()
-		}
-
-		f := v.FieldByIndex(descriptor.key.field.field.Index)
-		k, ok := f.Interface().(int64)
-		if !ok {
-			return nil, errors.New("Not able to update entity with non unique id key")
-		}
-
-		xa, err := txn.GetTxnByID(k)
-		if err != nil {
-			return nil, err
-		}
-
-		return xa.Update(entity)
+	v := reflect.ValueOf(entity)
+	partition, err := txn.getPartitionFromEntity(descriptor, &v)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errors.New("Not able to update entity that does not have a key")
+	xa, err := txn.GetTxnByPartition(partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return xa.Update(entity)
 }
 
 // UpdateAt update entity at the specific partition
@@ -674,27 +668,18 @@ func (txn *MyClusterTxn) UpdateToAll(entity interface{}) ([]sql.Result, error) {
 // Delete delete the entity from database
 func (txn *MyClusterTxn) Delete(entity interface{}) (sql.Result, error) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
-	if descriptor.key != nil {
-		v := reflect.ValueOf(entity)
-		for v.Kind() == reflect.Ptr {
-			v = v.Elem()
-		}
-
-		f := v.FieldByIndex(descriptor.key.field.field.Index)
-		k, ok := f.Interface().(int64)
-		if !ok {
-			return nil, errors.New("Not able to update entity with non unique id key")
-		}
-
-		xa, err := txn.GetTxnByID(k)
-		if err != nil {
-			return nil, err
-		}
-
-		return xa.Delete(entity)
+	v := reflect.ValueOf(entity)
+	partition, err := txn.getPartitionFromEntity(descriptor, &v)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, errors.New("Not able to update entity that does not have a key")
+	xa, err := txn.GetTxnByPartition(partition)
+	if err != nil {
+		return nil, err
+	}
+
+	return xa.Delete(entity)
 }
 
 // DeleteAt delete the specified entry from the given partition
@@ -743,4 +728,40 @@ func (txn *MyClusterTxn) ExecuteOnAll(query string, args ...interface{}) ([]sql.
 	}
 
 	return results, nil
+}
+
+func (txn *MyClusterTxn) getPartitionFromEntity(descriptor *EntityDescriptor, entityValue *reflect.Value) (int32, error) {
+	if entityValue.Kind() == reflect.Ptr {
+		v := entityValue.Elem()
+		entityValue = &v
+	}
+
+	if descriptor.key == nil {
+		if descriptor.partitionKey == nil {
+			return -1, errors.New("No partition key or key defined")
+		}
+
+		partitionKey := entityValue.FieldByIndex(descriptor.partitionKey.field.Index).Interface()
+		strValue, ok := partitionKey.(string)
+
+		var partition int32 = -1
+		if ok {
+			partition = txn.partitionCalc.GetPartition(strValue)
+		} else if intValue, ok := partitionKey.(int64); ok {
+			partition = GetPartitionKey(intValue)
+		}
+
+		if partition == -1 {
+			return -1, errors.New("Not able to get partition for entity")
+		}
+
+		return partition, nil
+	}
+
+	id, ok := entityValue.FieldByIndex(descriptor.key.field.field.Index).Interface().(int64)
+	if !ok {
+		return -1, errors.New("invalid key value")
+	}
+
+	return GetPartitionKey(id), nil
 }

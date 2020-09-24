@@ -199,7 +199,7 @@ func (cluster *MyCluster) CreateTransaction(ctx context.Context) (*MyClusterTxn,
 		return nil, err
 	}
 
-	return newMyClusterTxn(ctx, txn.ID, cluster.master, cluster.partitions, cluster.idGen, cluster.unknownResolver), nil
+	return newMyClusterTxn(ctx, txn.ID, cluster.master, cluster.partitions, cluster.idGen, cluster.partitionCalc, cluster.unknownResolver), nil
 }
 
 // InsertToAll insert entity to all partitions
@@ -266,11 +266,17 @@ func (cluster *MyCluster) Delete(ctx context.Context, entity interface{}) (sql.R
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 	value := reflect.ValueOf(entity)
 	id, err := cluster.getEntityKey(descriptor, &value)
+	var partition int32 = -1
 	if err != nil {
-		return nil, err
+		partition, err = cluster.getPartitionFromEntity(descriptor, &value)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		partition = GetPartitionKey(id)
 	}
 
-	return cluster.GetDbAccessorByID(id).Delete(ctx, entity)
+	return cluster.GetDbAccessor(partition).Delete(ctx, entity)
 }
 
 // InsertByKey insert entity to db based on given partition key
@@ -301,11 +307,17 @@ func (cluster *MyCluster) Update(ctx context.Context, entity interface{}) error 
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(entity))
 	value := reflect.ValueOf(entity)
 	id, err := cluster.getEntityKey(descriptor, &value)
+	var partition int32 = -1
 	if err != nil {
-		return err
+		partition, err = cluster.getPartitionFromEntity(descriptor, &value)
+		if err != nil {
+			return err
+		}
+	} else {
+		partition = GetPartitionKey(id)
 	}
 
-	_, err = cluster.GetDbAccessorByID(id).Update(ctx, entity)
+	_, err = cluster.GetDbAccessor(partition).Update(ctx, entity)
 	return err
 }
 
