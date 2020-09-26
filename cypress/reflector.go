@@ -88,16 +88,15 @@ func GetFieldValueGetters(t reflect.Type) map[string]*FieldValueGetter {
 			field := currentType.Field(i)
 			tag := field.Tag
 			tags := strings.Split(field.Tag.Get(EntityTagsDTags), ",")
-			isSecure := false
-			for t := 0; t < len(tags); t = t + 1 {
-				if strings.ToLower(strings.Trim(tags[t], " \t")) == EntityTagsDTagsSecure {
-					isSecure = true
-					break
+			if func() bool {
+				for _, t := range tags {
+					if strings.ToLower(strings.Trim(t, " \t")) == EntityTagsDTagsSecure {
+						return true
+					}
 				}
 
-			}
-
-			if isSecure {
+				return false
+			}() {
 				continue
 			}
 
