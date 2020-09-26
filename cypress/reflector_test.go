@@ -6,9 +6,10 @@ import (
 )
 
 type innerStruct struct {
-	Value  float64 `col:"fvalue"`
-	Value2 string  `alias:"svalue"`
-	Root   *testStruct
+	Value    float64 `col:"fvalue"`
+	Value2   string  `alias:"svalue"`
+	Password string  `dtags:"secure"`
+	Root     *testStruct
 }
 
 type dumpStruct struct {
@@ -26,11 +27,18 @@ func TestFieldGetters(t *testing.T) {
 	obj := &testStruct{}
 	getters := GetFieldValueGetters(reflect.TypeOf(obj).Elem())
 	val := reflect.ValueOf(obj)
-	getters["Field1"].Get(val.Elem()).SetString("field1")
+	getters["field1"].Get(val.Elem()).SetString("field1")
 	getters["dump_value"].Get(val.Elem()).SetInt(100)
 	getters["dump_ptr"].Get(val.Elem()).SetInt(200)
 	getters["dump_i_fvalue"].Get(val.Elem()).SetFloat(300.0)
 	getters["dump_i_svalue"].Get(val.Elem()).SetString("svalue")
+	_, ok := getters["dump_i_password"]
+	if ok {
+		// password is a secure field, should not be returned
+		t.Error("innerStruct.Password is a secure field and cannot be refactored")
+		return
+	}
+
 	if obj.Field1 != "field1" {
 		t.Error("Field1 not set, expect field1 but get value", obj.Field1)
 		return

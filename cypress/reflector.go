@@ -2,6 +2,7 @@ package cypress
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/golang-collections/collections/stack"
@@ -86,13 +87,26 @@ func GetFieldValueGetters(t reflect.Type) map[string]*FieldValueGetter {
 		for i := 0; i < currentType.NumField(); i++ {
 			field := currentType.Field(i)
 			tag := field.Tag
-			name := tag.Get("alias")
+			tags := strings.Split(field.Tag.Get(EntityTagsDTags), ",")
+			if func() bool {
+				for _, t := range tags {
+					if strings.ToLower(strings.Trim(t, " \t")) == EntityTagsDTagsSecure {
+						return true
+					}
+				}
+
+				return false
+			}() {
+				continue
+			}
+
+			name := tag.Get(EntityTagsAlias)
 			if name == "" {
-				name = tag.Get("col")
+				name = tag.Get(EntityTagsCol)
 			}
 
 			if name == "" {
-				name = field.Name
+				name = ToSnakeCase(field.Name)
 			}
 
 			if field.Type.Kind() == reflect.Struct || (field.Type.Kind() == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct) {
@@ -115,7 +129,7 @@ func GetFieldValueGetters(t reflect.Type) map[string]*FieldValueGetter {
 					continue
 				}
 
-				prefix := tag.Get("prefix")
+				prefix := tag.Get(EntityTagsPrefix)
 				if prefix == "" {
 					prefix = field.Name + "_"
 				}

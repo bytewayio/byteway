@@ -134,26 +134,22 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 	descriptor.tableName = EntityToTableNameMapper.Resolve(ty.Name())
 	for i := 0; i < ty.NumField(); i = i + 1 {
 		field := ty.Field(i)
-		tags := strings.Split(field.Tag.Get("dtags"), ",")
+		tags := strings.Split(field.Tag.Get(EntityTagsDTags), ",")
+		tagsSet := make(map[string]bool)
 		for t := 0; t < len(tags); t = t + 1 {
-			tags[t] = strings.ToLower(strings.Trim(tags[t], " \t"))
+			tagsSet[strings.ToLower(strings.Trim(tags[t], " \t"))] = true
 		}
 
 		hasTag := func(tag string) bool {
-			for _, t := range tags {
-				if t == tag {
-					return true
-				}
-			}
-
-			return false
+			v, ok := tagsSet[tag]
+			return v && ok
 		}
 
 		// valid tags: alias, noupdate, key, nogen, autoinc, partition,multikey
-		alias := hasTag("alias")
-		name := field.Tag.Get("alias")
+		alias := hasTag(EntityTagsAlias)
+		name := field.Tag.Get(EntityTagsAlias)
 		if name == "" {
-			name = field.Tag.Get("col")
+			name = field.Tag.Get(EntityTagsCol)
 		} else {
 			alias = true // declared as alias
 		}
@@ -169,26 +165,26 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 			}
 
 			descriptor.fields = append(descriptor.fields, fi)
-			if hasTag("key") {
+			if hasTag(EntityTagsDTagsKey) {
 				if descriptor.key != nil {
 					panic("duplicate key declared for " + ty.Name())
 				}
 
 				descriptor.key = &keyInfo{
 					field:   fi,
-					autoGen: !hasTag("nogen"),
+					autoGen: !hasTag(EntityTagsDTagsNoGen),
 				}
-			} else if hasTag("multikey") {
+			} else if hasTag(EntityTagsDTagsMultiKey) {
 				descriptor.multiKeys = append(descriptor.multiKeys, fi)
-			} else if !hasTag("noupdate") {
+			} else if !hasTag(EntityTagsDTagsNoUpdate) {
 				descriptor.updateFields = append(descriptor.updateFields, fi)
 			}
 
-			if hasTag("partition") {
+			if hasTag(EntityTagsDTagsPartition) {
 				descriptor.partitionKey = fi
 			}
 
-			if !hasTag("autoinc") {
+			if !hasTag(EntityTagsDTagsAutoInc) {
 				descriptor.insertFields = append(descriptor.insertFields, fi)
 			}
 		}
