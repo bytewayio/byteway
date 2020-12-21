@@ -80,6 +80,13 @@ func (m *ConcurrentMap) Get(key string) (interface{}, bool) {
 	return value, ok
 }
 
+// Len gets the length of the underlying values
+func (m *ConcurrentMap) Len() int {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return len(m.values)
+}
+
 // GetOrCompute gets a value from map if it does not exist
 // compute the value from the given generator
 func (m *ConcurrentMap) GetOrCompute(key string, generator func() interface{}) interface{} {

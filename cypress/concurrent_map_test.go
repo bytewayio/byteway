@@ -44,4 +44,8 @@ func TestConcurrentMap(t *testing.T) {
 	if v4.(int) != 400 {
 		t.Error("value for key3 expected to be 400 but got", v4.(int))
 	}
+
+	if m.Len() != 3 {
+		t.Error("length of the map expected to be 3")
+	}
 }
