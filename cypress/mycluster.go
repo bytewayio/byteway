@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/rand"
 	"reflect"
+	"time"
 
 	"github.com/gofrs/uuid"
 )
@@ -14,12 +15,13 @@ import (
 // for cluster that requires more than 32 partitions, consider tidb or
 // similar distributed database
 type MyCluster struct {
-	master          *DbAccessor
+	txnStore        TxnStore
 	partitions      []*DbAccessor
 	unknownResolver *unknownStateTxnResolver
 	idGen           UniqueIDGenerator
 	partitionCalc   PartitionCalculator
 	rand            *rand.Rand
+	exitChan        chan bool
 }
 
 // NewMyCluster creates an instance of MyCluster
@@ -28,22 +30,43 @@ func NewMyCluster(master *DbAccessor, partitions []*DbAccessor, txnTimeout int, 
 		idGen = NewDbUniqueIDGenerator(master)
 	}
 
+	return NewMyClusterWithTxnStore(NewDbClusterTxnStore(master), partitions, txnTimeout, idGen, partitionCalc)
+}
+
+// NewMyClusterWithTxnStore create a new instance of MyCluster with given TxnStore
+func NewMyClusterWithTxnStore(txnStore TxnStore, partitions []*DbAccessor, txnTimeout int, idGen UniqueIDGenerator, partitionCalc PartitionCalculator) *MyCluster {
 	if partitionCalc == nil {
 		partitionCalc = PartitionCalculateFunc(CalculateMd5PartitionKey)
 	}
 
-	return &MyCluster{
-		master:     master,
+	cluster := &MyCluster{
+		txnStore:   txnStore,
 		partitions: partitions,
 		unknownResolver: &unknownStateTxnResolver{
-			master:     master,
+			txnStore:   txnStore,
 			partitions: partitions,
 			txnTimeout: txnTimeout,
 		},
 		idGen:         idGen,
 		partitionCalc: partitionCalc,
 		rand:          rand.New(rand.NewSource(GetEpochMillis())),
+		exitChan:      make(chan bool),
 	}
+
+	go cluster.unknownResolver.startMonitor(cluster.exitChan)
+	return cluster
+}
+
+// Close close all resources that acquired by current instance
+func (cluster *MyCluster) Close() {
+	cluster.exitChan <- true
+	close(cluster.exitChan)
+
+	for _, p := range cluster.partitions {
+		p.db.Close()
+	}
+
+	cluster.txnStore.Close()
 }
 
 // GetAllPartitions gets all physical partitions in cluster
@@ -188,18 +211,12 @@ func (cluster *MyCluster) CreateTransaction(ctx context.Context) (*MyClusterTxn,
 		return nil, err
 	}
 
-	txn := &ClusterTxn{
-		ID:        id.String(),
-		State:     ClusterTxnStateNone,
-		Timestamp: GetEpochMillis(),
-	}
-
-	_, err = cluster.master.Insert(ctx, txn)
+	txn, err := cluster.txnStore.CreateTxn(ctx, id.String(), time.Now())
 	if err != nil {
 		return nil, err
 	}
 
-	return newMyClusterTxn(ctx, txn.ID, cluster.master, cluster.partitions, cluster.idGen, cluster.partitionCalc, cluster.unknownResolver), nil
+	return newMyClusterTxn(ctx, txn.ID, cluster.txnStore, cluster.partitions, cluster.idGen, cluster.partitionCalc, cluster.unknownResolver), nil
 }
 
 // InsertToAll insert entity to all partitions

@@ -16,7 +16,12 @@ func ToSnakeCase(str string) string {
 	return strings.ToLower(snake)
 }
 
-// GetEpochMillis get epoch milliseconds
+// GetEpochMillis get epoch milliseconds for now
 func GetEpochMillis() int64 {
-	return time.Now().UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
+	return ConvertToEpochMillis(time.Now())
+}
+
+// ConvertToEpochMillis convert a time object to epoch in milliseconds
+func ConvertToEpochMillis(t time.Time) int64 {
+	return t.UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
 }
