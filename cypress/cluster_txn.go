@@ -44,11 +44,19 @@ const (
 	XAStateCommitted
 )
 
-// ClusterTxn cluster transaction object in master database
+// ClusterTxn cluster transaction entity
 type ClusterTxn struct {
-	ID        string `col:"id" dtags:"key,nogen"`
+	ID              string `col:"id" dtags:"key,nogen"`
+	State           int    `col:"state"`
+	Timestamp       int64  `col:"timestamp"`
+	LeaseExpiration int64  `col:"lease_expiration"`
+}
+
+// TxnParticipant cluster transaction participant
+type TxnParticipant struct {
+	TxnID     string `col:"txn_id" dtags:"multikey"`
+	Partition int    `col:"partition" dtags:"multikey"`
 	State     int    `col:"state"`
-	Timestamp int64  `col:"timestamp"`
 }
 
 // XaTxnID xa transaction id format
@@ -59,8 +67,35 @@ type XaTxnID struct {
 	Data           string `col:"data"`
 }
 
+// TxnStore a cluster transaction entity store to keep cluster transaction states
+type TxnStore interface {
+	// CreateTxn create a transaction entity
+	CreateTxn(ctx context.Context, txnID string, t time.Time) (*ClusterTxn, error)
+
+	// GetTxn get transaction entity by ID
+	GetTxn(ctx context.Context, txnID string) (*ClusterTxn, error)
+
+	// UpdateTxnState update transaction state
+	UpdateTxnState(ctx context.Context, txnID string, state int) error
+
+	// AddTxnParticipant add a participant to a transaction
+	AddTxnParticipant(ctx context.Context, txnID string, partition int) error
+
+	// DeleteTxn delete partition from store
+	DeleteTxn(ctx context.Context, txnID string) error
+
+	// LeaseExpiredTxns lease expired transactions, only expired and lease expired (or not lease) transactions are visible
+	LeaseExpiredTxns(ctx context.Context, expireTime, leaseTimeout time.Time, items int) ([]*ClusterTxn, error)
+
+	// ListParticipants list all participants in transaction
+	ListParticipants(ctx context.Context, txnID string) ([]*TxnParticipant, error)
+
+	// Close close all resources used by store
+	Close() error
+}
+
 type unknownStateTxnResolver struct {
-	master     *DbAccessor
+	txnStore   TxnStore
 	partitions []*DbAccessor
 	txnTimeout int
 }
@@ -80,33 +115,31 @@ func (r *unknownStateTxnResolver) resolve(txnID string) {
 }
 
 func (r *unknownStateTxnResolver) resolveTxn(txnID string) {
-	dbTxn, err := r.master.BeginTxn(context.Background())
+	ctx := context.Background()
+	txn, err := r.txnStore.GetTxn(ctx, txnID)
 	if err != nil {
-		zap.L().Error("failed to start transaction to resolve unknown state txn", zap.Error(err))
+		zap.L().Error("failed to get cluster txn entity", zap.Error(err))
 		return
 	}
 
-	defer dbTxn.Close()
-	item, err := dbTxn.QueryOne("select * from `cluster_txn` where `id`=? for update", NewSmartMapper(&ClusterTxn{}), txnID)
-	if err != nil {
-		zap.L().Error("failed to get transaction", zap.String("txnID", txnID))
+	if txn == nil {
+		zap.L().Error("cluster txn entity not found", zap.String("id", txnID))
 		return
 	}
 
-	txn := item.(*ClusterTxn)
 	action := "ROLLBACK"
 	if txn.State == ClusterTxnStateCommitted {
 		action = "COMMIT"
 	}
 
-	participants, err := dbTxn.QueryAll("select `partition` from `txn_participant` where `txn_id`=?", NewSmartMapper(0), txnID)
+	participants, err := r.txnStore.ListParticipants(ctx, txn.ID)
 	if err != nil {
 		zap.L().Error("failed to query participants", zap.Error(err))
 		return
 	}
 
 	for _, p := range participants {
-		participant := p.(int)
+		participant := p.Partition
 		if participant < 0 {
 			zap.L().Info("invalid participant for transaction", zap.Int("participant", participant), zap.String("txnID", txnID))
 			continue
@@ -133,20 +166,16 @@ func (r *unknownStateTxnResolver) resolveTxn(txnID string) {
 			_, err = dbAccessor.Execute(context.Background(), fmt.Sprintf("XA %v %v", action, xaid))
 			if err != nil {
 				zap.L().Error("failed to fix transaction", zap.Error(err), zap.String("txnID", txnID), zap.Int("participant", participant))
-			} else {
-				zap.L().Info("transaction fixed", zap.String("txnID", txnID), zap.Int("participant", participant))
+				return
 			}
+
+			zap.L().Info("transaction fixed", zap.String("txnID", txnID), zap.Int("participant", participant))
 		}
 	}
 
-	_, err = dbTxn.Execute("delete from `cluster_txn` where `id`=?", txnID)
+	err = r.txnStore.DeleteTxn(ctx, txnID)
 	if err != nil {
-		zap.L().Info("failed to cleanup txn from master", zap.String("txnID", txnID))
-	}
-
-	_, err = dbTxn.Execute("delete from `txn_participant` where `txn_id`=?", txnID)
-	if err != nil {
-		zap.L().Info("failed to cleanup participants from master", zap.String("txnID", txnID))
+		zap.L().Info("failed to delete transaction entity", zap.String("txnID", txnID))
 	}
 }
 
@@ -154,13 +183,14 @@ func (r *unknownStateTxnResolver) startMonitor(done <-chan bool) {
 	ticker := time.NewTicker(time.Duration(r.txnTimeout/2) * time.Second)
 	defer ticker.Stop()
 	for {
-		threshold := GetEpochMillis() + int64(r.txnTimeout*1000)
-		expiredTxns, err := r.master.QueryAll(context.Background(), "select * from `cluster_txn` where `timestamp`<?", NewSmartMapper(&ClusterTxn{}), threshold)
+		leaseTimeout := time.Now().Add(time.Minute)
+		txnExpiration := time.Now().Add(time.Second * time.Duration(-r.txnTimeout))
+		expiredTxns, err := r.txnStore.LeaseExpiredTxns(context.Background(), txnExpiration, leaseTimeout, 20)
 		if err != nil {
-			zap.L().Error("failed to query expired transactions", zap.Error(err))
+			zap.L().Error("failed to lease expired transactions for processing", zap.Error(err))
 		} else {
 			for _, txn := range expiredTxns {
-				r.resolveTxn(txn.(*ClusterTxn).ID)
+				r.resolveTxn(txn.ID)
 			}
 		}
 
@@ -285,8 +315,9 @@ func (xa *XATransaction) Close() {
 	if xa.state == XAStatePrepared {
 		xa.resolver.resolve(xa.id)
 	} else if xa.state == XAStateActive || xa.state == XAStateIdle {
-		err := xa.rollback()
-		zap.L().Error("failed to rollback faulted transaction", zap.Error(err), zap.String("txnID", xa.id))
+		if err := xa.rollback(); err != nil {
+			zap.L().Error("failed to rollback faulted transaction", zap.Error(err), zap.String("txnID", xa.id))
+		}
 	}
 
 	xa.conn.Close()
@@ -482,7 +513,7 @@ func (xa *XATransaction) QueryAll(query string, mapper RowMapper, args ...interf
 type MyClusterTxn struct {
 	id            string
 	ctx           context.Context
-	master        *DbAccessor
+	txnStore      TxnStore
 	partitions    []*DbAccessor
 	participants  map[int]*XATransaction
 	idGen         UniqueIDGenerator
@@ -493,7 +524,7 @@ type MyClusterTxn struct {
 func newMyClusterTxn(
 	ctx context.Context,
 	id string,
-	master *DbAccessor,
+	txnStore TxnStore,
 	partitions []*DbAccessor,
 	idGen UniqueIDGenerator,
 	partitionCalc PartitionCalculator,
@@ -501,7 +532,7 @@ func newMyClusterTxn(
 	return &MyClusterTxn{
 		id:            id,
 		ctx:           ctx,
-		master:        master,
+		txnStore:      txnStore,
 		partitions:    partitions,
 		participants:  make(map[int]*XATransaction),
 		idGen:         idGen,
@@ -520,7 +551,7 @@ func (txn *MyClusterTxn) Commit() error {
 	}
 
 	// mark for resolver in case of failure
-	_, err := txn.master.Execute(txn.ctx, "update `cluster_txn` set `state`=? where `id`=?", ClusterTxnStateCommitted, txn.id)
+	err := txn.txnStore.UpdateTxnState(txn.ctx, txn.id, ClusterTxnStateCommitted)
 	if err != nil {
 		return err
 	}
@@ -534,12 +565,7 @@ func (txn *MyClusterTxn) Commit() error {
 	}
 
 	// cleanup all coordinator related data
-	_, err = txn.master.Execute(txn.ctx, "delete from `cluster_txn` where `id`=?", txn.id)
-	if err != nil {
-		return err
-	}
-
-	_, err = txn.master.Execute(txn.ctx, "delete from `txn_participant` where `txn_id`=?", txn.id)
+	err = txn.txnStore.DeleteTxn(txn.ctx, txn.id)
 	if err != nil {
 		return err
 	}
@@ -557,12 +583,7 @@ func (txn *MyClusterTxn) Rollback() error {
 	}
 
 	// cleanup all coordinator related data
-	_, err := txn.master.Execute(txn.ctx, "delete from `cluster_txn` where `id`=?", txn.id)
-	if err != nil {
-		return err
-	}
-
-	_, err = txn.master.Execute(txn.ctx, "delete from `txn_participant` where `txn_id`=?", txn.id)
+	err := txn.txnStore.DeleteTxn(txn.ctx, txn.id)
 	if err != nil {
 		return err
 	}
@@ -578,7 +599,7 @@ func (txn *MyClusterTxn) GetTxnByPartition(partition int32) (*XATransaction, err
 		return t, nil
 	}
 
-	_, err := txn.master.Execute(txn.ctx, "insert into `txn_participant`(`txn_id`, `partition`) values(?, ?)", txn.id, physicalPartition)
+	err := txn.txnStore.AddTxnParticipant(txn.ctx, txn.id, physicalPartition)
 	if err != nil {
 		return nil, err
 	}
