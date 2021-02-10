@@ -176,7 +176,7 @@ func createEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 				}
 			} else if hasTag(EntityTagsDTagsMultiKey) {
 				descriptor.multiKeys = append(descriptor.multiKeys, fi)
-			} else if !hasTag(EntityTagsDTagsNoUpdate) {
+			} else if !hasTag(EntityTagsDTagsNoUpdate) && !hasTag(EntityTagsDTagsPartition) {
 				descriptor.updateFields = append(descriptor.updateFields, fi)
 			}
 

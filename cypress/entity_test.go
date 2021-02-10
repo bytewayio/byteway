@@ -17,6 +17,12 @@ type testEntity struct {
 	Alias2      string `col:"alias2" dtags:"alias"`
 }
 
+type testEntity1 struct {
+	ID          int64  `col:"id" dtags:"key"`
+	Name        string `col:"name" dtags:"partition"`
+	LastUpdated int64  `col:"last_update_ts"`
+}
+
 func TestEntityDescriptor(t *testing.T) {
 	descriptor := GetOrCreateEntityDescriptor(reflect.TypeOf(&testEntity{}))
 	t.Log(descriptor.InsertSQL)
@@ -39,6 +45,13 @@ func TestEntityDescriptor(t *testing.T) {
 
 	if len(descriptor.insertFields) != 3 {
 		t.Error("expected three insert field")
+		return
+	}
+
+	// Ensure partition key is not upatable
+	descriptor = GetOrCreateEntityDescriptor(reflect.TypeOf(&testEntity1{}))
+	if len(descriptor.updateFields) != 1 {
+		t.Error("expected only one update field")
 		return
 	}
 }
