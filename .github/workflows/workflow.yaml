@@ -11,6 +11,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: User_123
+        ports:
+        - 3306:3306
     
     steps:
     - name: checkout source
@@ -20,12 +27,6 @@ jobs:
       uses: zhulik/redis-action@1.1.0
       with:
         redis version: '5'
-
-    - name: setup mysql
-      uses: mirromutth/mysql-action@v1.1
-      with:
-        mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
-        mysql root password: User_123
     
     - name: setup jdk
       uses: actions/setup-java@v1
@@ -39,8 +40,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y wget
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
-        tar -xvzf apache-zookeeper-3.6.2-bin.tar.gz
-        sudo apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
+        tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
+        cd apache-zookeeper-3.6.2-bin/bin && sudo ./zkServer.sh start
+        sudo netstat plnto
+        sudo ps aux
 
     - name: build and test
       uses: cedrickring/golang-action@1.6.0
