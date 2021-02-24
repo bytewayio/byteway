@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 
 	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -87,25 +86,25 @@ func CalculateMd5PartitionKey(key string) int32 {
 // UniqueIDPool unique id pool
 type UniqueIDPool struct {
 	pooledIDs      []int64
-	weightedQueues []*semaphore.Weighted
+	partitionLocks []*sync.Mutex
 	Lock           *sync.Mutex
 }
 
 // NewUniqueIDPool creates a new ID pool
 func NewUniqueIDPool() *UniqueIDPool {
 	pooledIDs := make([]int64, PartitionKeyMask+1)
-	weightedQueues := make([]*semaphore.Weighted, 1<<PartitionKeyBitWidth)
+	partitionLocks := make([]*sync.Mutex, 1<<PartitionKeyBitWidth)
 	for i := 0; i < len(pooledIDs); i = i + 1 {
 		pooledIDs[i] = MaxSegmentedID
 	}
 
-	for i := 0; i < len(weightedQueues); i = i + 1 {
-		weightedQueues[i] = semaphore.NewWeighted(SegmentedIDMask)
+	for i := 0; i < len(partitionLocks); i = i + 1 {
+		partitionLocks[i] = &sync.Mutex{}
 	}
 
 	return &UniqueIDPool{
 		pooledIDs:      pooledIDs,
-		weightedQueues: weightedQueues,
+		partitionLocks: partitionLocks,
 		Lock:           &sync.Mutex{},
 	}
 }
@@ -116,12 +115,8 @@ func (pool *UniqueIDPool) NextID(ctx context.Context, partition int32) (int64, e
 		return 0, ErrOutOfRange
 	}
 
-	err := pool.weightedQueues[partition].Acquire(ctx, 1)
-	if err != nil {
-		return 0, err
-	}
-
-	defer pool.weightedQueues[partition].Release(1)
+	pool.partitionLocks[partition].Lock()
+	defer pool.partitionLocks[partition].Unlock()
 	return atomic.AddInt64(&pool.pooledIDs[partition], 1), nil
 }
 

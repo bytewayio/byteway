@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -136,25 +136,13 @@ func LoggingHandler(handler http.Handler) http.Handler {
 		}()
 
 		var correlationID string
-		var activityID string
+		activityID := uuid.NewString()
 		timeNow := time.Now()
 		headerValues, ok := request.Header[CorrelationIDHeader]
 		if ok && len(headerValues) > 0 {
 			correlationID = headerValues[0]
 		} else {
-			uuid, err := uuid.NewV4()
-			if err != nil {
-				correlationID = "no-correlation-id"
-			} else {
-				correlationID = uuid.String()
-			}
-		}
-
-		uuid, err := uuid.NewV4()
-		if err == nil {
-			activityID = uuid.String()
-		} else {
-			activityID = "no-activity-id"
+			correlationID = uuid.NewString()
 		}
 
 		tw := &traceableResponseWriter{
