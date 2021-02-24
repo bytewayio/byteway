@@ -10,13 +10,14 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v2
-    - name: checkout source and setup test env
-    - run: |
+    - name: checkout source
+      uses: actions/checkout@v2
+
+    - name: setup test env
+      run: |
         sudo add-apt-repository ppa:redislabs/redis
         sudo apt-get update
         sudo apt-get install -y redis
@@ -30,7 +31,7 @@ jobs:
         apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
 
     - name: build and test
-    - uses: cedrickring/golang-action@1.6.0
-    - env:
+      uses: cedrickring/golang-action@1.6.0
+      env:
         PROJECT_PATH: "./cypress"
         GO111MODULE: "on"
