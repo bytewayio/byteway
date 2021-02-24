@@ -24,6 +24,11 @@ jobs:
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     
     steps:
+    - name: Verify MySQL connection from host
+      run: |
+        sudo apt-get install -y mysql-client
+        mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -pUser_123 -e "SHOW DATABASES"
+
     - name: checkout source
       uses: actions/checkout@v2
 
@@ -46,7 +51,7 @@ jobs:
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
         tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
         cd apache-zookeeper-3.6.2-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
-        sudo netstat plnto
+        sudo netstat -plnto
         sudo ps aux
 
     - name: build and test
