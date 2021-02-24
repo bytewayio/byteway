@@ -11,22 +11,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        redis-version: [4, 5, 6]
     services:
       mysql:
         image: mysql:5.7
         env:
           MYSQL_ROOT_PASSWORD: User_123
         ports:
-        - 3306:3306
+        - 3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     
     steps:
     - name: checkout source
       uses: actions/checkout@v2
 
-    - name: setup redis
-      uses: zhulik/redis-action@1.1.0
+    - name: start redis
+      uses: supercharge/redis-github-action@1.2.0
       with:
-        redis version: '5'
+        redis-version: ${{ matrix.redis-version }}
     
     - name: setup jdk
       uses: actions/setup-java@v1
@@ -41,7 +45,7 @@ jobs:
         sudo apt-get install -y wget
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
         tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
-        cd apache-zookeeper-3.6.2-bin/bin && sudo ./zkServer.sh start
+        cd apache-zookeeper-3.6.2-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
         sudo netstat plnto
         sudo ps aux
 
@@ -50,3 +54,4 @@ jobs:
       env:
         PROJECT_PATH: "./cypress"
         GO111MODULE: "on"
+        MYSQL_PORT: ${{ job.services.mysql.ports['3306'] }}
