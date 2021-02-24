@@ -1,0 +1,36 @@
+name: Build and test
+
+on: 
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    - name: checkout source and setup test env
+    - run: |
+        sudo add-apt-repository ppa:redislabs/redis
+        sudo apt-get update
+        sudo apt-get install -y redis
+        sudo systemctl start redis
+        sudo apt-get install -y mysql-server
+        sudo systemctl start mysql
+        sudo mysql -uroot -proot -e "use mysql; update user set authentication_string=PASSWORD('User_123') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;set global max_connections = 1000;"
+        sudo apt-get install -y wget
+        wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
+        tar -xvzf apache-zookeeper-3.6.2-bin.tar.gz
+        apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
+
+    - name: build and test
+    - uses: cedrickring/golang-action@1.6.0
+    - env:
+        PROJECT_PATH: "./cypress"
+        GO111MODULE: "on"
