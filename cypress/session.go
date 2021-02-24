@@ -2,16 +2,14 @@ package cypress
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/gob"
 	"errors"
-	"io"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -26,11 +24,7 @@ var (
 
 // NewSessionID creates a new session ID
 func NewSessionID() string {
-	guid, err := uuid.NewV1()
-	if err != nil {
-		io.ReadFull(rand.Reader, guid[:])
-	}
-
+	guid := uuid.New()
 	return base64.RawURLEncoding.EncodeToString(guid[:])
 }
 

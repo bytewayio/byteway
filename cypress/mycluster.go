@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // MyCluster MySQL based database cluster, up to 32 physical partitions,
@@ -206,12 +206,7 @@ func (cluster *MyCluster) InsertAt(ctx context.Context, partition int32, entity 
 
 // CreateTransaction creates a cluster transaction
 func (cluster *MyCluster) CreateTransaction(ctx context.Context) (*MyClusterTxn, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, err
-	}
-
-	txn, err := cluster.txnStore.CreateTxn(ctx, id.String(), time.Now())
+	txn, err := cluster.txnStore.CreateTxn(ctx, uuid.NewString(), time.Now())
 	if err != nil {
 		return nil, err
 	}

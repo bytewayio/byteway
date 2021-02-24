@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 const (
@@ -610,12 +610,7 @@ func TestUnknownStateClusterTxnResolution(t *testing.T) {
 			return err
 		}
 
-		uid, err := uuid.NewV4()
-		if err != nil {
-			return err
-		}
-
-		txnID := uid.String()
+		txnID := uuid.NewString()
 		txn, err := cluster.txnStore.CreateTxn(context.Background(), txnID, time.Now())
 		if err != nil {
 			return err
