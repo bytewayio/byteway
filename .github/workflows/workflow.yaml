@@ -20,7 +20,7 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: User_123
         ports:
-        - 3306
+        - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     
     steps:
@@ -31,6 +31,9 @@ jobs:
 
     - name: checkout source
       uses: actions/checkout@v2
+    
+    - name: setup golang
+      uses: actions/setup-go@v2
 
     - name: start redis
       uses: supercharge/redis-github-action@1.2.0
@@ -51,12 +54,11 @@ jobs:
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
         tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
         cd apache-zookeeper-3.6.2-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
+        sleep 5
         sudo netstat -plnto
         sudo ps aux
 
     - name: build and test
-      uses: cedrickring/golang-action@1.6.0
+      run: go test
       env:
-        PROJECT_PATH: "./cypress"
-        GO111MODULE: "on"
         MYSQL_PORT: ${{ job.services.mysql.ports['3306'] }}
