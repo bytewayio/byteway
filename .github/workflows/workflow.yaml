@@ -10,27 +10,55 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        redis-version: [4, 5, 6]
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: User_123
+        ports:
+        - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     
     steps:
-    - uses: actions/checkout@v2
-    - name: checkout source and setup test env
-    - run: |
-        sudo add-apt-repository ppa:redislabs/redis
+    - name: Verify MySQL connection from host
+      run: |
+        sudo apt-get install -y mysql-client
+        mysql --host 127.0.0.1 --port ${{ job.services.mysql.ports['3306'] }} -uroot -pUser_123 -e "SHOW DATABASES"
+
+    - name: checkout source
+      uses: actions/checkout@v2
+    
+    - name: setup golang
+      uses: actions/setup-go@v2
+
+    - name: start redis
+      uses: supercharge/redis-github-action@1.2.0
+      with:
+        redis-version: ${{ matrix.redis-version }}
+    
+    - name: setup jdk
+      uses: actions/setup-java@v1
+      with:
+        java-version: '11' # The JDK version to make available on the path.
+        java-package: jdk # (jre, jdk, or jdk+fx) - defaults to jdk
+        architecture: x64 # (x64 or x86) - defaults to x64
+    
+    - name: setup zookeeper
+      run: |
         sudo apt-get update
-        sudo apt-get install -y redis
-        sudo systemctl start redis
-        sudo apt-get install -y mysql-server
-        sudo systemctl start mysql
-        sudo mysql -uroot -proot -e "use mysql; update user set authentication_string=PASSWORD('User_123') where User='root'; update user set plugin='mysql_native_password';FLUSH PRIVILEGES;set global max_connections = 1000;"
         sudo apt-get install -y wget
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
-        tar -xvzf apache-zookeeper-3.6.2-bin.tar.gz
-        apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
+        tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
+        cd apache-zookeeper-3.6.2-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
+        sleep 5
+        sudo netstat -plnto
+        sudo ps aux
 
     - name: build and test
-    - uses: cedrickring/golang-action@1.6.0
-    - env:
-        PROJECT_PATH: "./cypress"
-        GO111MODULE: "on"
+      run: cd cypress && go test
+      env:
+        MYSQL_PORT: ${{ job.services.mysql.ports['3306'] }}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -60,8 +61,13 @@ const (
 )
 
 func runClusterTest(t *testing.T, runner func(*MyCluster) error) {
+	mysqlPort := os.Getenv("MYSQL_PORT")
+	if len(mysqlPort) == 0 {
+		mysqlPort = "3306"
+	}
+
 	SetupLogger(LogLevelDebug, NewRollingLogWriter("test.log", 1, 10))
-	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/")
+	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/")
 	if err != nil {
 		t.Skip("Skip database related tests as dev env is not configured", err)
 		return
@@ -92,7 +98,7 @@ func runClusterTest(t *testing.T, runner func(*MyCluster) error) {
 
 	defer db.Exec("drop database " + partition2)
 
-	master, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/"+masterDb)
+	master, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/"+masterDb)
 	if err != nil {
 		t.Error("Failed to open master db", err)
 		return
@@ -109,7 +115,7 @@ func runClusterTest(t *testing.T, runner func(*MyCluster) error) {
 		}
 	}
 
-	partition1Db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/"+partition1)
+	partition1Db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/"+partition1)
 	if err != nil {
 		t.Error("Failed to open partition1 db", err)
 		return
@@ -126,7 +132,7 @@ func runClusterTest(t *testing.T, runner func(*MyCluster) error) {
 		}
 	}
 
-	partition2Db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/"+partition2)
+	partition2Db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/"+partition2)
 	if err != nil {
 		t.Error("Failed to open partition2 db", err)
 		return

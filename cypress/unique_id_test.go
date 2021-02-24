@@ -3,8 +3,10 @@ package cypress
 import (
 	"context"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
+	"os"
 	"testing"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 func TestUniqueID(t *testing.T) {
@@ -31,7 +33,12 @@ func TestUniqueID(t *testing.T) {
 }
 
 func TestGenerateMoreThanMaxSegmentedIdValues(t *testing.T) {
-	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/")
+	mysqlPort := os.Getenv("MYSQL_PORT")
+	if len(mysqlPort) == 0 {
+		mysqlPort = "3306"
+	}
+
+	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/")
 	if err != nil {
 		t.Skip("database is not available", err)
 		return
@@ -46,7 +53,7 @@ func TestGenerateMoreThanMaxSegmentedIdValues(t *testing.T) {
 
 	defer db.Exec("drop database cypress_test_uid_gen_1")
 	err = func() error {
-		db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/cypress_test_uid_gen_1")
+		db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/cypress_test_uid_gen_1")
 		if err != nil {
 			return err
 		}
@@ -91,7 +98,12 @@ func TestGenerateMoreThanMaxSegmentedIdValues(t *testing.T) {
 }
 
 func TestConcurrentGeneration(t *testing.T) {
-	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/")
+	mysqlPort := os.Getenv("MYSQL_PORT")
+	if len(mysqlPort) == 0 {
+		mysqlPort = "3306"
+	}
+
+	db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/")
 	if err != nil {
 		t.Skip("database is not available", err)
 		return
@@ -106,7 +118,7 @@ func TestConcurrentGeneration(t *testing.T) {
 
 	defer db.Exec("drop database cypress_test_uid_gen_2")
 	err = func() error {
-		db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:3306)/cypress_test_uid_gen_2")
+		db, err := sql.Open("mysql", "root:User_123@tcp(127.0.0.1:"+mysqlPort+")/cypress_test_uid_gen_2")
 		if err != nil {
 			return err
 		}
