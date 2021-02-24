@@ -11,9 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        redis-version: [4, 5, 6]
     services:
       mysql:
         image: mysql:5.7
@@ -37,8 +34,6 @@ jobs:
 
     - name: start redis
       uses: supercharge/redis-github-action@1.2.0
-      with:
-        redis-version: ${{ matrix.redis-version }}
     
     - name: setup jdk
       uses: actions/setup-java@v1
