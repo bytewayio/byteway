@@ -40,7 +40,7 @@ jobs:
         sudo apt-get install -y wget
         wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
         tar -xvzf apache-zookeeper-3.6.2-bin.tar.gz
-        apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
+        sudo apache-zookeeper-3.6.2-bin/bin/zkServer.sh start
 
     - name: build and test
       uses: cedrickring/golang-action@1.6.0
