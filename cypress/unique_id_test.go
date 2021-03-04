@@ -135,6 +135,7 @@ func TestConcurrentGeneration(t *testing.T) {
 				v, e := g.NextUniqueID(context.Background(), "testKey1", 1)
 				if e != nil {
 					t.Log("failed to generate IDs due to", e)
+					i-- // retry
 					continue
 				}
 
