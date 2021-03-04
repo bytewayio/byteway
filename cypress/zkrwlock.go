@@ -249,3 +249,16 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 	releaseLocalLock = true
 	return ErrLockCancelled
 }
+
+// Unlock release writer lock
+func (rwLock *ZkRWLock) Unlock() {
+	rwLock.localLock.Unlock()
+	rwLock.lock.Unlock()
+	defer rwLock.lock.Unlock()
+
+	rwLock.writerLockAcquired = false
+	err := rwLock.conn.Delete(rwLock.writerPath, -1)
+	if err != nil {
+		zap.L().Error("!!!failed to delete writer node, no more lock can be granted", zap.String("node", rwLock.writerPath), zap.Error(err))
+	}
+}
