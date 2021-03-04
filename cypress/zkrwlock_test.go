@@ -2,13 +2,14 @@ package cypress
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/go-zookeeper/zk"
 )
 
-func TestZkLockRelease(t *testing.T) {
+func TestZkRWLockRelease(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -19,16 +20,22 @@ func TestZkLockRelease(t *testing.T) {
 	}
 
 	defer conn.Close()
-	_, err = conn.Create("/locks1", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/rwlocks1", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks1", 0)
+	defer conn.Delete("/rwlocks1", 0)
 
-	lock := NewZkLock(conn, "/locks1/test1")
+	lock, err := NewZkRWLock(conn, "/rwlocks1/test1")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
 	err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
@@ -36,7 +43,7 @@ func TestZkLockRelease(t *testing.T) {
 		return
 	}
 
-	lock.Release()
+	lock.Unlock()
 
 	err = lock.Lock(context.Background())
 	if err != nil {
@@ -45,10 +52,10 @@ func TestZkLockRelease(t *testing.T) {
 		return
 	}
 
-	lock.Release()
+	lock.Unlock()
 }
 
-func TestZkLockWithCancelledByTimeout(t *testing.T) {
+func TestZkRWLockWithCancelledByTimeout(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -68,21 +75,33 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 
 	defer conn1.Close()
 
-	_, err = conn.Create("/locks2", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/rwlocks2", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks2", 0)
+	defer conn.Delete("/rwlocks2", 0)
 
-	lock1 := NewZkLock(conn, "/locks2/test2")
-	lock2 := NewZkLock(conn1, "/locks2/test2")
+	lock1, err := NewZkRWLock(conn, "/rwlocks2/test2")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	lock2, err := NewZkRWLock(conn1, "/rwlocks2/test2")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
 	ch := make(chan int, 1)
 	go func() {
 		lock1.Lock(context.Background())
-		defer lock1.Release()
+		defer lock1.Unlock()
 		ch <- 1
 		time.Sleep(time.Second * 2)
 	}()
@@ -105,10 +124,10 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 		return
 	}
 
-	lock2.Release()
+	lock2.Unlock()
 }
 
-func TestZkLockCancelled(t *testing.T) {
+func TestZkRWLockCancelled(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -120,16 +139,21 @@ func TestZkLockCancelled(t *testing.T) {
 
 	defer conn.Close()
 
-	_, err = conn.Create("/locks3", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/rwlocks3", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks3", 0)
+	defer conn.Delete("/rwlocks3", 0)
 
-	lock := NewZkLock(conn, "/locks3/test3")
+	lock, err := NewZkRWLock(conn, "/rwlocks3/test3")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	cancelFunc()
@@ -141,7 +165,7 @@ func TestZkLockCancelled(t *testing.T) {
 	}
 }
 
-func TestZkLockWithContention(t *testing.T) {
+func TestZkRWLockWithContention(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -161,20 +185,32 @@ func TestZkLockWithContention(t *testing.T) {
 
 	defer conn1.Close()
 
-	_, err = conn.Create("/locks4", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/rwlocks4", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks4", 0)
+	defer conn.Delete("/rwlocks4", 0)
 
-	lock1 := NewZkLock(conn, "/locks4/test4")
-	lock2 := NewZkLock(conn1, "/locks4/test4")
+	lock1, err := NewZkRWLock(conn, "/rwlocks4/test4")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	lock2, err := NewZkRWLock(conn1, "/rwlocks4/test4")
+	if err != nil {
+		t.Error("failed to create rw lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
 	counter := 0
 	ch := make(chan int32, 1)
-	proc := func(lock *ZkLock) {
+	writerProc := func(lock *ZkRWLock) {
 		for i := 0; i < 100; i++ {
 			func() {
 				e1 := lock.Lock(context.Background())
@@ -183,15 +219,38 @@ func TestZkLockWithContention(t *testing.T) {
 					DumpBufferWriter(t, writer)
 					return
 				}
-				defer lock.Release()
+				defer lock.Unlock()
 				counter++
 			}()
 		}
 
 		ch <- 1
 	}
-	go proc(lock1)
-	go proc(lock2)
+
+	var reads int32 = 0
+	readerProc := func(lock *ZkRWLock) {
+		for i := 0; i < 100; i++ {
+			func() {
+				err := lock.RLock(context.Background())
+				if err != nil {
+					t.Error("failed to acquire reader lock with contention", err)
+					DumpBufferWriter(t, writer)
+					return
+				}
+
+				defer lock.RUnlock()
+				atomic.AddInt32(&reads, 1)
+			}()
+		}
+
+		ch <- 1
+	}
+	go writerProc(lock1)
+	go writerProc(lock2)
+	go readerProc(lock1)
+	go readerProc(lock2)
+	<-ch
+	<-ch
 	<-ch
 	<-ch
 	if counter != 200 {
@@ -199,9 +258,15 @@ func TestZkLockWithContention(t *testing.T) {
 		DumpBufferWriter(t, writer)
 		return
 	}
+
+	if reads != 200 {
+		t.Error("read counter is not increased atomically, expected 200, actuall ", reads)
+		DumpBufferWriter(t, writer)
+		return
+	}
 }
 
-func TestZkLockWithSameInstanceContention(t *testing.T) {
+func TestZkRWLockWithSameInstanceContention(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -213,19 +278,19 @@ func TestZkLockWithSameInstanceContention(t *testing.T) {
 
 	defer conn.Close()
 
-	_, err = conn.Create("/locks5", []byte{}, 0, zk.WorldACL(zk.PermAll))
+	_, err = conn.Create("/rwlocks5", []byte{}, 0, zk.WorldACL(zk.PermAll))
 	if err != nil && err != zk.ErrNodeExists {
 		t.Error("not able to create lock root", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	defer conn.Delete("/locks5", 0)
+	defer conn.Delete("/rwlocks5", 0)
 
-	lock := NewZkLock(conn, "/locks5/test5")
+	lock, err := NewZkRWLock(conn, "/rwlocks5/test5")
 	counter := 0
 	ch := make(chan int32, 1)
-	proc := func(lock *ZkLock) {
+	writerProc := func(lock *ZkRWLock) {
 		for i := 0; i < 100; i++ {
 			func() {
 				e1 := lock.Lock(context.Background())
@@ -234,19 +299,48 @@ func TestZkLockWithSameInstanceContention(t *testing.T) {
 					DumpBufferWriter(t, writer)
 					return
 				}
-				defer lock.Release()
+				defer lock.Unlock()
 				counter++
 			}()
 		}
 
 		ch <- 1
 	}
-	go proc(lock)
-	go proc(lock)
+	var reads int32 = 0
+	readerProc := func(lock *ZkRWLock) {
+		for i := 0; i < 100; i++ {
+			func() {
+				err := lock.RLock(context.Background())
+				if err != nil {
+					t.Error("failed to acquire reader lock with contention", err)
+					DumpBufferWriter(t, writer)
+					return
+				}
+
+				defer lock.RUnlock()
+				atomic.AddInt32(&reads, 1)
+			}()
+		}
+
+		ch <- 1
+	}
+
+	go writerProc(lock)
+	go writerProc(lock)
+	go readerProc(lock)
+	go readerProc(lock)
+	<-ch
+	<-ch
 	<-ch
 	<-ch
 	if counter != 200 {
 		t.Error("counter is not increased atomically, expected 200, actuall ", counter)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	if reads != 200 {
+		t.Error("read counter is not increased atomically, expected 200, actuall ", reads)
 		DumpBufferWriter(t, writer)
 		return
 	}

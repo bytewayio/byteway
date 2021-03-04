@@ -10,12 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	eventCreated = 0
-	eventDeleted = 1
-	eventExit    = 2
-)
-
 var (
 	// ErrLockFailed failed to lock
 	ErrLockFailed = errors.New("failed to lock")
@@ -129,9 +123,14 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 func (lock *ZkLock) Release() {
 	err := lock.conn.Delete(lock.path, -1)
 	if err != nil {
-		zap.L().Error("failed to delete lock node", zap.String("path", lock.path), zap.Error(err))
+		zap.L().Fatal("failed to delete lock node", zap.String("path", lock.path), zap.Error(err))
 	}
 
 	lock.acquired = false
 	lock.localLock.Unlock()
+}
+
+// Unlock release the lock, alias of Release
+func (lock *ZkLock) Unlock() {
+	lock.Release()
 }
