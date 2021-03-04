@@ -259,6 +259,6 @@ func (rwLock *ZkRWLock) Unlock() {
 	rwLock.writerLockAcquired = false
 	err := rwLock.conn.Delete(rwLock.writerPath, -1)
 	if err != nil {
-		zap.L().Error("!!!failed to delete writer node, no more lock can be granted", zap.String("node", rwLock.writerPath), zap.Error(err))
+		zap.L().Fatal("!!!failed to delete writer node, no more lock can be granted", zap.String("node", rwLock.writerPath), zap.Error(err))
 	}
 }
