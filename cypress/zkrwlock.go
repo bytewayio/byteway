@@ -253,7 +253,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 // Unlock release writer lock
 func (rwLock *ZkRWLock) Unlock() {
 	rwLock.localLock.Unlock()
-	rwLock.lock.Unlock()
+	rwLock.lock.Lock()
 	defer rwLock.lock.Unlock()
 
 	rwLock.writerLockAcquired = false
