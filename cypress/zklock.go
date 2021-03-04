@@ -10,12 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	eventCreated = 0
-	eventDeleted = 1
-	eventExit    = 2
-)
-
 var (
 	// ErrLockFailed failed to lock
 	ErrLockFailed = errors.New("failed to lock")
