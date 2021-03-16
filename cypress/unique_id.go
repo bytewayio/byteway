@@ -83,6 +83,13 @@ func CalculateMd5PartitionKey(key string) int32 {
 	return int32(id % PartitionKeyMask)
 }
 
+// CalculateMd5PartitionKey2 Md5 based partition key calculator, a fixed version to CalculateMd5PartitionKey
+func CalculateMd5PartitionKey2(key string) int32 {
+	data := Md5([]byte(key))
+	id := binary.BigEndian.Uint64(data[0:8])
+	return int32(id % (1 << PartitionKeyBitWidth))
+}
+
 // UniqueIDPool unique id pool
 type UniqueIDPool struct {
 	pooledIDs      []int64
