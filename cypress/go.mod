@@ -4,8 +4,8 @@ go 1.14
 
 require (
 	github.com/dchest/captcha v0.0.0-20200903113550-03f5f0333e1f
-	github.com/go-redis/redis/v8 v8.6.0
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-redis/redis/v8 v8.8.0
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/go-zookeeper/zk v1.0.2
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/google/uuid v1.2.0
