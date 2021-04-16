@@ -102,7 +102,7 @@ func (cluster *MyCluster) GetUniqueID(ctx context.Context, entity interface{}, p
 
 func (cluster *MyCluster) getPartitionFromEntity(descriptor *EntityDescriptor, entityValue *reflect.Value) (int32, error) {
 	if descriptor.partitionKey == nil {
-		return -1, errors.New("No partition key defined")
+		return -1, errors.New("no partition key defined")
 	}
 
 	if entityValue.Kind() == reflect.Ptr {
@@ -121,7 +121,7 @@ func (cluster *MyCluster) getPartitionFromEntity(descriptor *EntityDescriptor, e
 	}
 
 	if partition == -1 {
-		return -1, errors.New("Not able to get partition for entity")
+		return -1, errors.New("not able to get partition for entity")
 	}
 
 	return partition, nil
@@ -370,8 +370,8 @@ func (cluster *MyCluster) QueryOne(ctx context.Context, query string, mapper Row
 }
 
 // GetOne query one entity by the given prototype
-func (cluster *MyCluster) GetOne(ctx context.Context, prototype interface{}, query string, aggregator func(interface{}, interface{}) interface{}, args ...interface{}) (interface{}, error) {
-	return cluster.QueryOne(ctx, query, NewSmartMapper(prototype), aggregator, args...)
+func (cluster *MyCluster) GetOne(ctx context.Context, ty reflect.Type, query string, aggregator func(interface{}, interface{}) interface{}, args ...interface{}) (interface{}, error) {
+	return cluster.QueryOne(ctx, query, NewSmartMapper(ty), aggregator, args...)
 }
 
 // QueryAll query all entities from all partitions by the given mapper
@@ -392,8 +392,8 @@ func (cluster *MyCluster) QueryAll(ctx context.Context, query string, mapper Row
 }
 
 // GetAll get all entities from all partition by the given prototype
-func (cluster *MyCluster) GetAll(ctx context.Context, prototype interface{}, query string, args ...interface{}) ([][]interface{}, error) {
-	return cluster.QueryAll(ctx, query, NewSmartMapper(prototype), args...)
+func (cluster *MyCluster) GetAll(ctx context.Context, ty reflect.Type, query string, args ...interface{}) ([][]interface{}, error) {
+	return cluster.QueryAll(ctx, query, NewSmartMapper(ty), args...)
 }
 
 // QueryAllReduced query all entities and apply the reducer
@@ -407,8 +407,8 @@ func (cluster *MyCluster) QueryAllReduced(ctx context.Context, query string, map
 }
 
 // GetAllReduced get all entries and apply the reduce
-func (cluster *MyCluster) GetAllReduced(ctx context.Context, prototype interface{}, query string, reducer func([][]interface{}) []interface{}, args ...interface{}) ([]interface{}, error) {
-	return cluster.QueryAllReduced(ctx, query, NewSmartMapper(prototype), reducer, args...)
+func (cluster *MyCluster) GetAllReduced(ctx context.Context, ty reflect.Type, query string, reducer func([][]interface{}) []interface{}, args ...interface{}) ([]interface{}, error) {
+	return cluster.QueryAllReduced(ctx, query, NewSmartMapper(ty), reducer, args...)
 }
 
 // QueryPage query a page of entities by the given page merger
@@ -422,6 +422,6 @@ func (cluster *MyCluster) QueryPage(ctx context.Context, query string, mapper Ro
 }
 
 // GetPage get a page of entities by the given prototype
-func (cluster *MyCluster) GetPage(ctx context.Context, prototype interface{}, query string, merger *PageMerger, args ...interface{}) ([]interface{}, error) {
-	return cluster.QueryPage(ctx, query, NewSmartMapper(prototype), merger, args...)
+func (cluster *MyCluster) GetPage(ctx context.Context, ty reflect.Type, query string, merger *PageMerger, args ...interface{}) ([]interface{}, error) {
+	return cluster.QueryPage(ctx, query, NewSmartMapper(ty), merger, args...)
 }

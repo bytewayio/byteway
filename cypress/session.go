@@ -188,10 +188,8 @@ func (handler *sessionHandler) ServeHTTP(writer http.ResponseWriter, request *ht
 // NewSessionHandler creates a new session handler with registering the session object types
 func NewSessionHandler(pipeline http.Handler, store SessionStore, timeout time.Duration, valueTypes ...interface{}) http.Handler {
 	gob.Register(make(map[string]interface{}))
-	if valueTypes != nil {
-		for _, valueType := range valueTypes {
-			gob.Register(valueType)
-		}
+	for _, valueType := range valueTypes {
+		gob.Register(valueType)
 	}
 
 	return &sessionHandler{store, pipeline, timeout}

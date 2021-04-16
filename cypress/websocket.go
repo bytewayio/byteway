@@ -205,17 +205,14 @@ func (handler *WebSocketHandler) connectionLoop(session *WebSocketSession) {
 		switch msgType {
 		case websocket.BinaryMessage:
 			handler.Listener.OnBinaryMessage(session, data)
-			break
 		case websocket.TextMessage:
 			handler.Listener.OnTextMessage(session, string(data))
-			break
 		case websocket.CloseMessage:
 			handler.Listener.OnClose(session, websocket.CloseNormalClosure)
 			session.connection.Close()
 			return
 		default:
 			zap.L().Error("not able to handle message type", zap.Int("messageType", msgType), zap.String("remoteAddr", session.RemoteAddr))
-			break
 		}
 	}
 }

@@ -31,9 +31,9 @@ func NewPageMerger(pageSize int, comparer Comparer) *PageMerger {
 func (m *PageMerger) Merge(lists ...[]interface{}) []interface{} {
 	emulators := make([][]interface{}, 0)
 	results := make([]interface{}, 0)
-	if lists != nil && len(lists) > 0 {
+	if len(lists) > 0 {
 		for _, l := range lists {
-			if l != nil && len(l) > 0 {
+			if len(l) > 0 {
 				emulators = append(emulators, l)
 			}
 		}

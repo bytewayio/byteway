@@ -56,7 +56,6 @@ func NewFileSessionStore(directory string) (SessionStore, error) {
 			select {
 			case <-store.gcTicker.C:
 				store.doGC()
-				break
 			case <-store.exitChan:
 				return
 			}

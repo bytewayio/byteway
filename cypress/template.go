@@ -16,16 +16,11 @@ import (
 
 var (
 	//ErrNoFile no file given for Creating a template
-	ErrNoFile = errors.New("No template file")
+	ErrNoFile = errors.New("no template file")
 
 	//SkinDefault default skin name
 	SkinDefault = "default"
 )
-
-type templateFileInfo struct {
-	file        string
-	lastModifed time.Time
-}
 
 // TemplateConfigFunc shared templates config function
 type TemplateConfigFunc func(*template.Template)
@@ -161,7 +156,6 @@ func NewTemplateManager(dir, suffix string, refreshInterval time.Duration, confi
 			select {
 			case <-mgr.refresher.C:
 				mgr.refreshTemplates()
-				break
 			case <-mgr.exitChan:
 				return
 			}

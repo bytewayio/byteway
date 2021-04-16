@@ -155,7 +155,7 @@ type PooledID struct {
 	PooledID  int64  `col:"pooled_id"`
 }
 
-var pooledIDPrototype = &PooledID{}
+var pooledIDType = reflect.TypeOf((*PooledID)(nil))
 
 // DbUniqueIDGenerator database based unique id generator
 type DbUniqueIDGenerator struct {
@@ -215,7 +215,7 @@ func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name str
 					obj, queryErr := generator.dbAccessor.QueryOne(
 						ctx,
 						"select * from `pooled_id` where `name`=? and `partition`=?",
-						NewSmartMapper(pooledIDPrototype),
+						NewSmartMapper(pooledIDType),
 						name, partition)
 					if queryErr != nil {
 						return queryErr

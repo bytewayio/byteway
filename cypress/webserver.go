@@ -390,10 +390,8 @@ func (server *WebServer) AddStaticResource(prefix, dir string) *WebServer {
 func (server *WebServer) WithSessionOptions(store SessionStore, timeout time.Duration, valueTypes ...interface{}) *WebServer {
 	server.sessionStore = store
 	server.sessionTimeout = timeout
-	if valueTypes != nil {
-		for _, valueType := range valueTypes {
-			gob.Register(valueType)
-		}
+	for _, valueType := range valueTypes {
+		gob.Register(valueType)
 	}
 
 	return server

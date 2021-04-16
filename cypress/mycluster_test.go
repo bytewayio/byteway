@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -375,7 +376,7 @@ func TestClusterGetAll(t *testing.T) {
 			return err
 		}
 
-		all, err := cluster.GetAll(context.Background(), b, "select * from `balance`")
+		all, err := cluster.GetAll(context.Background(), reflect.TypeOf(b), "select * from `balance`")
 		if err != nil {
 			return err
 		}
@@ -385,7 +386,7 @@ func TestClusterGetAll(t *testing.T) {
 			return nil
 		}
 
-		data, err := cluster.GetDbAccessorByID(b.ID).QueryOne(context.Background(), "select * from `sub_balance` where `balance_id`=?", NewSmartMapper(&subBalance{}), b.ID)
+		data, err := cluster.GetDbAccessorByID(b.ID).QueryOne(context.Background(), "select * from `sub_balance` where `balance_id`=?", NewSmartMapper(reflect.TypeOf((*subBalance)(nil))), b.ID)
 		if err != nil {
 			return err
 		}
@@ -434,7 +435,7 @@ func TestClusterTxnWithSuccess(t *testing.T) {
 			return err
 		}
 
-		all, err := cluster.GetAll(context.Background(), &balance{}, "select * from `balance`")
+		all, err := cluster.GetAll(context.Background(), reflect.TypeOf((*balance)(nil)), "select * from `balance`")
 		if err != nil {
 			return err
 		}
@@ -490,7 +491,7 @@ func TestClusterTxnWithFailure(t *testing.T) {
 				return err
 			}
 
-			b, err := t.GetOneByKey(b1, b1.ID)
+			b, err := t.GetOneByKey(reflect.TypeOf(b1), b1.ID)
 			if err != nil {
 				return err
 			}
@@ -506,7 +507,7 @@ func TestClusterTxnWithFailure(t *testing.T) {
 			return err
 		}
 
-		all, err := cluster.GetAll(context.Background(), &balance{}, "select * from `balance`")
+		all, err := cluster.GetAll(context.Background(), reflect.TypeOf((*balance)(nil)), "select * from `balance`")
 		if err != nil {
 			return err
 		}
@@ -542,7 +543,7 @@ func TestMultiKeyCURD(t *testing.T) {
 			return err
 		}
 
-		all, err := cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(&multiKeyEntity{}))
+		all, err := cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(reflect.TypeOf((*multiKeyEntity)(nil))))
 		if err != nil {
 			return err
 		}
@@ -578,7 +579,7 @@ func TestMultiKeyCURD(t *testing.T) {
 			return err
 		}
 
-		all, err = cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(&multiKeyEntity{}))
+		all, err = cluster.GetDbAccessorByKey("key2").QueryAll(context.Background(), "select * from multi_key_entity", NewSmartMapper(reflect.TypeOf((*multiKeyEntity)(nil))))
 		if err != nil {
 			return err
 		}
@@ -693,7 +694,7 @@ func TestUnknownStateClusterTxnResolution(t *testing.T) {
 			return err
 		}
 
-		b1, err := cluster.partitions[0].QueryOne(context.Background(), "select * from `balance` where id=?", NewSmartMapper(&balance{}), id1)
+		b1, err := cluster.partitions[0].QueryOne(context.Background(), "select * from `balance` where id=?", NewSmartMapper(reflect.TypeOf((*balance)(nil))), id1)
 		if err != nil {
 			return err
 		}
@@ -703,7 +704,7 @@ func TestUnknownStateClusterTxnResolution(t *testing.T) {
 			return nil
 		}
 
-		b2, err := cluster.partitions[1].QueryOne(context.Background(), "select * from `balance` where id=?", NewSmartMapper(&balance{}), id2)
+		b2, err := cluster.partitions[1].QueryOne(context.Background(), "select * from `balance` where id=?", NewSmartMapper(reflect.TypeOf((*balance)(nil))), id2)
 		if err != nil {
 			return err
 		}

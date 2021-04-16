@@ -288,6 +288,11 @@ func TestZkRWLockWithSameInstanceContention(t *testing.T) {
 	defer conn.Delete("/rwlocks5", 0)
 
 	lock, err := NewZkRWLock(conn, "/rwlocks5/test5")
+	if err != nil {
+		t.Error("failed to create lock")
+		return
+	}
+
 	counter := 0
 	ch := make(chan int32, 1)
 	writerProc := func(lock *ZkRWLock) {

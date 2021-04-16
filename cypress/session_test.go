@@ -58,7 +58,7 @@ func TestFileSessionStore(t *testing.T) {
 // TestRedisSessionStore test redis store, enable this by change first character to upper case
 // however, please make sure redis server is started without any password and default port before
 // you run the test case
-func testRedisSessionStore(t *testing.T) {
+func TestRedisSessionStore(t *testing.T) {
 	gob.Register(testObj{})
 	redisdb := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",

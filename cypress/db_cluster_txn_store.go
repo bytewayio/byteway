@@ -3,12 +3,13 @@ package cypress
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 )
 
 var (
-	protoClusterTxn     = &ClusterTxn{}
-	protoTxnParticipant = &TxnParticipant{}
+	clusterTxnType     = reflect.TypeOf((*ClusterTxn)(nil))
+	txnParticipantType = reflect.TypeOf((*TxnParticipant)(nil))
 )
 
 // DbClusterTxnStore an database based cluster transaction store implementation
@@ -117,7 +118,7 @@ func (store *DbClusterTxnStore) LeaseExpiredTxns(ctx context.Context, expireTime
 			defer txn.Close()
 			rows, err := txn.QueryAll(
 				"select * from cluster_txn where `timestamp`<=? and `lease_expiration`<=? limit ?",
-				NewSmartMapper(protoClusterTxn),
+				NewSmartMapper(clusterTxnType),
 				tsExpiration,
 				tsNow,
 				items)
@@ -168,7 +169,7 @@ func (store *DbClusterTxnStore) ListParticipants(ctx context.Context, txnID stri
 	rows, err := store.db.QueryAll(
 		ctx,
 		"select * from txn_participant where txn_id=?",
-		NewSmartMapper(protoTxnParticipant),
+		NewSmartMapper(txnParticipantType),
 		txnID)
 	if err != nil {
 		return nil, err

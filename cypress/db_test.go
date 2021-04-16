@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -125,7 +126,7 @@ func TestDbUsage(t *testing.T) {
 	}
 
 	// test smart mapper with additional column
-	objs, err = QueryAll(ctx, db, NewSmartMapper(&member{}), "select id, name, year_birth, 'test' as bad_column from member order by id asc")
+	objs, err = QueryAll(ctx, db, NewSmartMapper(reflect.TypeOf((*member)(nil))), "select id, name, year_birth, 'test' as bad_column from member order by id asc")
 	if err != nil {
 		t.Error(err)
 		return
@@ -167,18 +168,18 @@ func TestDbUsage(t *testing.T) {
 		return
 	}
 
-	obj, err = QueryOne(ctx, tx, NewSmartMapper(0), "select max(id) from member")
+	obj, err = QueryOne(ctx, tx, NewSmartMapper(reflect.TypeOf(0)), "select max(id) from member")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	if 1 != obj.(int) {
+	if obj.(int) != 1 {
 		t.Error(1, obj, "are not matched")
 		return
 	}
 
-	objs, err = QueryAll(ctx, tx, NewSmartMapper(""), "select name from member")
+	objs, err = QueryAll(ctx, tx, NewSmartMapper(reflect.TypeOf("")), "select name from member")
 	if err != nil {
 		t.Error(err)
 		return
