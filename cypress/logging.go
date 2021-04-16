@@ -89,10 +89,8 @@ func SetupLogger(level LogLevel, writer io.Writer) {
 	switch level {
 	case LogLevelInfo:
 		logLevel = zap.InfoLevel
-		break
 	case LogLevelWarn:
 		logLevel = zap.WarnLevel
-		break
 	case LogLevelError:
 		logLevel = zap.ErrorLevel
 	}

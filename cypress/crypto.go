@@ -30,15 +30,15 @@ func Sha1(data []byte) []byte {
 
 // Aes256Encrypt encrypts the data with given key and iv using AES256/CBC/PKCS5Padding
 func Aes256Encrypt(key, iv, data []byte) ([]byte, error) {
-	if key == nil || len(key) == 0 {
+	if len(key) == 0 {
 		return nil, errors.New("key cannot be null or empty")
 	}
 
-	if iv == nil || len(iv) == 0 {
+	if len(iv) == 0 {
 		return nil, errors.New("iv cannot be null or empty")
 	}
 
-	if data == nil || len(data) == 0 {
+	if len(data) == 0 {
 		return nil, errors.New("data cannot be null or empty")
 	}
 
@@ -58,15 +58,15 @@ func Aes256Encrypt(key, iv, data []byte) ([]byte, error) {
 
 // Aes256Decrypt decrypts the data with given key and iv using AES256/CBC/PKCS5Padding
 func Aes256Decrypt(key, iv, data []byte) ([]byte, error) {
-	if key == nil || len(key) == 0 {
+	if len(key) == 0 {
 		return nil, errors.New("key cannot be null or empty")
 	}
 
-	if iv == nil || len(iv) == 0 {
+	if len(iv) == 0 {
 		return nil, errors.New("iv cannot be null or empty")
 	}
 
-	if data == nil || len(data) == 0 {
+	if len(data) == 0 {
 		return nil, errors.New("data cannot be null or empty")
 	}
 
@@ -92,7 +92,7 @@ func pkcs5Padding(ciphertext []byte, blockSize int) []byte {
 
 func pkcs5Trimming(data []byte) ([]byte, error) {
 	padding := data[len(data)-1]
-	if padding < 0 || int(padding) >= len(data) {
+	if int(padding) >= len(data) {
 		return nil, errors.New("bad padding")
 	}
 

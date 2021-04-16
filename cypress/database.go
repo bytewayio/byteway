@@ -129,7 +129,7 @@ func (txn *DbTxn) Insert(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -147,7 +147,7 @@ func (txn *DbTxn) Update(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -167,7 +167,7 @@ func (txn *DbTxn) Delete(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -193,18 +193,17 @@ func (txn *DbTxn) Execute(command string, args ...interface{}) (sql.Result, erro
 }
 
 // GetOneByKey query one entity based on the key, the entity must have a sinle dimension key
-func (txn *DbTxn) GetOneByKey(proto interface{}, id interface{}) (interface{}, error) {
-	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+func (txn *DbTxn) GetOneByKey(ty reflect.Type, key interface{}) (interface{}, error) {
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
 	LogOperation(txn.ctx, "GetOneByKey"+ty.Name(), func() error {
 		ed := GetOrCreateEntityDescriptor(ty)
-		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, id)
+		result, err = QueryOne(txn.ctx, txn.tx, mapper, ed.GetOneSQL, key)
 		return err
 	})
 
@@ -214,10 +213,10 @@ func (txn *DbTxn) GetOneByKey(proto interface{}, id interface{}) (interface{}, e
 // GetOne query one entity based on the key fields set in the prototype
 func (txn *DbTxn) GetOne(proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -304,7 +303,7 @@ func (accessor *DbAccessor) Insert(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -322,7 +321,7 @@ func (accessor *DbAccessor) Update(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -342,7 +341,7 @@ func (accessor *DbAccessor) Delete(ctx context.Context, entity interface{}) (sql
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -368,12 +367,11 @@ func (accessor *DbAccessor) Execute(ctx context.Context, command string, args ..
 }
 
 // GetOneByKey query one entity based on the given key, the entity must have a single dimension primary key
-func (accessor *DbAccessor) GetOneByKey(ctx context.Context, proto interface{}, key interface{}) (interface{}, error) {
-	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+func (accessor *DbAccessor) GetOneByKey(ctx context.Context, ty reflect.Type, key interface{}) (interface{}, error) {
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -389,10 +387,10 @@ func (accessor *DbAccessor) GetOneByKey(ctx context.Context, proto interface{}, 
 // GetOne query one entity based on the prototype
 func (accessor *DbAccessor) GetOne(ctx context.Context, proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 

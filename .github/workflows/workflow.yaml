@@ -46,9 +46,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y wget
-        wget https://downloads.apache.org/zookeeper/zookeeper-3.6.2/apache-zookeeper-3.6.2-bin.tar.gz
-        tar -xzf apache-zookeeper-3.6.2-bin.tar.gz
-        cd apache-zookeeper-3.6.2-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
+        wget https://archive.apache.org/dist/zookeeper/zookeeper-3.6.3/apache-zookeeper-3.6.3-bin.tar.gz
+        tar -xzf apache-zookeeper-3.6.3-bin.tar.gz
+        cd apache-zookeeper-3.6.3-bin/conf && cp zoo_sample.cfg zoo.cfg && cd ../bin && sudo ./zkServer.sh start
         sleep 5
         sudo ps aux
 

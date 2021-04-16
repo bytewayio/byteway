@@ -98,7 +98,7 @@ func TestEntityDescriptorWithQueries(t *testing.T) {
 		return
 	}
 
-	e, err := QueryOne(context.Background(), db, NewSmartMapper(entity), descriptor.GetOneSQL, 100)
+	e, err := QueryOne(context.Background(), db, NewSmartMapper(reflect.TypeOf((*testEntity)(nil))), descriptor.GetOneSQL, 100)
 	if err != nil {
 		t.Error("failed to get entity back", err)
 		return
@@ -124,8 +124,12 @@ func TestEntityDescriptorWithQueries(t *testing.T) {
 	values := descriptor.GetUpdateValues(entity)
 	values = append(values, entity.ID)
 	_, err = db.Exec(descriptor.UpdateSQL, values...)
+	if err != nil {
+		t.Error("failed to execute update sql", err)
+		return
+	}
 
-	e, err = QueryOne(context.Background(), db, NewSmartMapper(entity), descriptor.GetOneSQL, 100)
+	e, err = QueryOne(context.Background(), db, NewSmartMapper(reflect.TypeOf((*testEntity)(nil))), descriptor.GetOneSQL, 100)
 	if err != nil {
 		t.Error("failed to get entity back", err)
 		return
@@ -143,7 +147,12 @@ func TestEntityDescriptorWithQueries(t *testing.T) {
 	}
 
 	_, err = db.Exec(descriptor.DeleteSQL, entity.ID)
-	e, err = QueryOne(context.Background(), db, NewSmartMapper(entity), descriptor.GetOneSQL, 100)
+	if err != nil {
+		t.Error("failed to delete entry", err)
+		return
+	}
+
+	e, err = QueryOne(context.Background(), db, NewSmartMapper(reflect.TypeOf((*testEntity)(nil))), descriptor.GetOneSQL, 100)
 	if err != nil {
 		t.Error("failed to get entity back", err)
 		return
@@ -212,6 +221,11 @@ func TestDbAccessor(t *testing.T) {
 
 	entity.LastUpdated = 2022
 	result, err := accessor.Update(context.Background(), entity)
+	if err != nil {
+		t.Error("failed to update entity", err)
+		return
+	}
+
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected != 1 {
 		t.Error("unexpected rows affected", rowsAffected)

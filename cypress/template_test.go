@@ -259,13 +259,13 @@ func TestSkinManager(t *testing.T) {
 		return
 	}
 
-	m, ok := skinMgr.GetSkin("skin3")
+	_, ok = skinMgr.GetSkin("skin3")
 	if ok {
 		t.Error("unexpected skin3 in skin manager")
 		return
 	}
 
-	m, ok = skinMgr.GetSkin("skin1")
+	m, ok := skinMgr.GetSkin("skin1")
 	if !ok {
 		t.Error("unexpected result, skin1 must exist")
 		return

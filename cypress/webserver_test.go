@@ -265,7 +265,7 @@ func TestWebServer(t *testing.T) {
 	}
 
 	resp.Body.Close()
-	if "<h1>Hello, /web/test/greeting?ticket=test</h1>" != string(body) {
+	if string(body) != "<h1>Hello, /web/test/greeting?ticket=test</h1>" {
 		t.Error("unexpected response", string(body))
 		DumpBufferWriter(t, writer)
 		return
@@ -316,13 +316,13 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	if "test" != log1.Controller {
+	if log1.Controller != "test" {
 		t.Error("expecting test but got", log1.Controller)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	if "greeting" != log1.Action {
+	if log1.Action != "greeting" {
 		t.Error("expecting greeting but got", log1.Action)
 		DumpBufferWriter(t, writer)
 		return
@@ -337,13 +337,13 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	if "/web/test/greeting" != log2.Path {
+	if log2.Path != "/web/test/greeting" {
 		t.Error("expecting /web/test/greeting but got", log2.Path)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	if 202 != log2.StatusCode {
+	if log2.StatusCode != 202 {
 		t.Error("expecting 202 but got", log2.StatusCode)
 		DumpBufferWriter(t, writer)
 		return
@@ -377,7 +377,7 @@ func TestWebServer(t *testing.T) {
 	}
 
 	resp.Body.Close()
-	if "action1" != string(body) {
+	if string(body) != "action1" {
 		t.Error("unexpected response", string(body))
 		DumpBufferWriter(t, writer)
 		return
@@ -419,7 +419,7 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	if "Page TitlePage Content2" != string(body) {
+	if string(body) != "Page TitlePage Content2" {
 		t.Error("unexpected response body", string(body))
 		DumpBufferWriter(t, writer)
 		return

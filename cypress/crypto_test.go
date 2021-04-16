@@ -44,7 +44,7 @@ func TestAes256Decrypt(t *testing.T) {
 		return
 	}
 
-	if "221.1001.1537075710000" != string(decrypted) {
+	if string(decrypted) != "221.1001.1537075710000" {
 		t.Error("221.1001.1537075710000 expected but got", string(decrypted))
 	}
 }
@@ -58,7 +58,7 @@ func TestAes256Encrypt(t *testing.T) {
 	}
 
 	text := base64.RawURLEncoding.EncodeToString(encrypted)
-	if "jnqPJ_spawkejMUW4FPizG4nqmL8OOjafPaMyDd6ge8" != text {
+	if text != "jnqPJ_spawkejMUW4FPizG4nqmL8OOjafPaMyDd6ge8" {
 		t.Error("jnqPJ_spawkejMUW4FPizG4nqmL8OOjafPaMyDd6ge8 expected but got", text)
 	}
 }

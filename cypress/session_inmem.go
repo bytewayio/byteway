@@ -33,7 +33,6 @@ func NewInMemorySessionStore() SessionStore {
 			select {
 			case <-store.gcTicker.C:
 				store.doGC()
-				break
 			case <-store.exitChan:
 				return
 			}

@@ -67,6 +67,8 @@ type XaTxnID struct {
 	Data           string `col:"data"`
 }
 
+var xaTxnIDType = reflect.TypeOf((*XaTxnID)(nil))
+
 // TxnStore a cluster transaction entity store to keep cluster transaction states
 type TxnStore interface {
 	// CreateTxn create a transaction entity
@@ -149,7 +151,7 @@ func (r *unknownStateTxnResolver) resolveTxn(txnID string) {
 		xaid := fmt.Sprintf("'%v','%v'", txnID, participant)
 		txnFound := false
 		dbAccessor := r.partitions[participant%len(r.partitions)]
-		xaidList, err := dbAccessor.QueryAll(context.Background(), "XA RECOVER", NewSmartMapper(&XaTxnID{}))
+		xaidList, err := dbAccessor.QueryAll(context.Background(), "XA RECOVER", NewSmartMapper(xaTxnIDType))
 		if err != nil {
 			zap.L().Error("failed to query xaid", zap.Error(err), zap.Int("participant", participant))
 			return
@@ -328,7 +330,7 @@ func (xa *XATransaction) Insert(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -353,7 +355,7 @@ func (xa *XATransaction) Update(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -380,7 +382,7 @@ func (xa *XATransaction) Delete(entity interface{}) (sql.Result, error) {
 	ty := reflect.TypeOf(entity)
 	var r sql.Result
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -420,12 +422,11 @@ func (xa *XATransaction) Execute(command string, args ...interface{}) (sql.Resul
 }
 
 // GetOneByKey query one entity based on the prototype and the single dimension key
-func (xa *XATransaction) GetOneByKey(proto interface{}, key interface{}) (interface{}, error) {
-	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+func (xa *XATransaction) GetOneByKey(ty reflect.Type, key interface{}) (interface{}, error) {
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -448,10 +449,10 @@ func (xa *XATransaction) GetOneByKey(proto interface{}, key interface{}) (interf
 // GetOne query one entity based on the keys in prototype
 func (xa *XATransaction) GetOne(proto interface{}) (interface{}, error) {
 	ty := reflect.TypeOf(proto)
-	mapper := NewSmartMapper(proto)
+	mapper := NewSmartMapper(ty)
 	var result interface{}
 	var err error
-	if ty.Kind() == reflect.Ptr {
+	for ty.Kind() == reflect.Ptr {
 		ty = ty.Elem()
 	}
 
@@ -779,7 +780,7 @@ func (txn *MyClusterTxn) getPartitionFromEntity(descriptor *EntityDescriptor, en
 
 	if descriptor.key == nil {
 		if descriptor.partitionKey == nil {
-			return -1, errors.New("No partition key or key defined")
+			return -1, errors.New("no partition key or key defined")
 		}
 
 		partitionKey := entityValue.FieldByIndex(descriptor.partitionKey.field.Index).Interface()
@@ -793,7 +794,7 @@ func (txn *MyClusterTxn) getPartitionFromEntity(descriptor *EntityDescriptor, en
 		}
 
 		if partition == -1 {
-			return -1, errors.New("Not able to get partition for entity")
+			return -1, errors.New("not able to get partition for entity")
 		}
 
 		return partition, nil

@@ -164,15 +164,12 @@ func TestConcurrentGeneration(t *testing.T) {
 		results := make(map[int64]bool)
 		numOfResults := 4
 		for numOfResults > 0 {
-			select {
-			case values := <-ch:
-				for _, v := range values {
-					results[v] = true
-				}
-
-				numOfResults--
-				break
+			values := <-ch
+			for _, v := range values {
+				results[v] = true
 			}
+
+			numOfResults--
 		}
 
 		if len(results) != 2000 {

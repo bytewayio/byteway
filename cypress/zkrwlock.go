@@ -77,7 +77,6 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 				cancelChannel <- 1
 			}
 		case <-cancelChannel:
-			break
 		}
 	}()
 
@@ -124,9 +123,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 				zap.L().Error("unexpected reader watch event", zap.Int32("event", int32(event.Type)), zap.String("reader", rwLock.readerPath), zap.String("trace", GetTraceID(ctx)))
 				return ErrLockFailed
 			}
-			break
 		case <-cancelChannel:
-			break
 		}
 	}
 
@@ -237,7 +234,6 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 				if event.Type != zk.EventNodeChildrenChanged {
 					zap.L().Error("unexpected node event", zap.String("node", rwLock.writerPath), zap.Int32("event", int32(event.Type)), zap.String("trace", GetTraceID(ctx)))
 				}
-				break
 			case <-cancelChannel:
 				releaseLocalLock = true
 				return ErrLockCancelled

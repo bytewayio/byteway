@@ -15,8 +15,8 @@ type smartMapper struct {
 }
 
 // NewSmartMapper creates a smart row mapper for data row
-func NewSmartMapper(value interface{}) RowMapper {
-	return &smartMapper{reflect.TypeOf(value)}
+func NewSmartMapper(ty reflect.Type) RowMapper {
+	return &smartMapper{ty}
 }
 
 // Map maps the data row to a value object
@@ -33,7 +33,7 @@ func (mapper *smartMapper) Map(row DataRow) (interface{}, error) {
 
 	if len(columnTypes) == 1 {
 		t := mapper.valueType
-		if t.Kind() == reflect.Ptr {
+		for t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
 
@@ -45,11 +45,10 @@ func (mapper *smartMapper) Map(row DataRow) (interface{}, error) {
 	}
 
 	valueType := mapper.valueType
-	if valueType.Kind() != reflect.Ptr {
-		return nil, ErrPointerRequired
+	for valueType.Kind() == reflect.Ptr {
+		valueType = valueType.Elem()
 	}
 
-	valueType = valueType.Elem()
 	getters := GetFieldValueGetters(valueType)
 	value := reflect.New(valueType)
 	values := make([]interface{}, len(columns))
