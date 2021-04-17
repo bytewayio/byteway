@@ -52,7 +52,14 @@ func NewZkRWLock(conn *zk.Conn, path string) (*ZkRWLock, error) {
 func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 	rwLock.localLock.RLock()
 	releaseLocalLock := false
+	cleanupReaderNode := false
 	defer func() {
+		if cleanupReaderNode {
+			if cleanupErr := rwLock.conn.Delete(rwLock.readerPath, -1); cleanupErr != nil {
+				zap.L().Fatal("!!!failed to cleanup reader node, writers will be hungry", zap.Error(cleanupErr), zap.String("node", rwLock.readerPath), zap.String("trace", GetTraceID(ctx)))
+			}
+		}
+
 		if releaseLocalLock {
 			rwLock.localLock.RUnlock()
 		}
@@ -92,6 +99,9 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 			return err
 		}
 
+		// Need to cleanup reader node in case of failure
+		cleanupReaderNode = true
+
 		// 2. Check writer node
 		exists, _, ch, err := rwLock.conn.ExistsW(rwLock.writerPath)
 		if err != nil {
@@ -100,9 +110,10 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 			return err
 		}
 
-		// Node does not exist
+		// Node does not exist, reader lock acquired
 		if !exists {
 			rwLock.readerLockAcquired = true
+			cleanupReaderNode = false
 			atomic.AddInt32(&rwLock.readers, 1)
 			return nil
 		}
@@ -115,6 +126,9 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 			zap.L().Fatal("!!!failed to release reader node, writers will be hungry", zap.String("node", rwLock.readerPath), zap.Error(err), zap.String("trace", GetTraceID(ctx)))
 			return err
 		}
+
+		// Reader node has already deleted, no need to cleanup
+		cleanupReaderNode = false
 
 		select {
 		case event := <-ch:
@@ -153,7 +167,14 @@ func (rwLock *ZkRWLock) RUnlock() {
 func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 	rwLock.localLock.Lock()
 	releaseLocalLock := false
+	cleanupWriterNode := false
 	defer func() {
+		if cleanupWriterNode {
+			if cleanupErr := rwLock.conn.Delete(rwLock.writerPath, -1); cleanupErr != nil {
+				zap.L().Fatal("!!!failed to cleanup writer node, no lock can be acquired", zap.Error(cleanupErr), zap.String("node", rwLock.writerPath), zap.String("trace", GetTraceID(ctx)))
+			}
+		}
+
 		if releaseLocalLock {
 			rwLock.localLock.Unlock()
 		}
@@ -213,6 +234,9 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 			return err
 		}
 
+		// Need to cleanup writer node in case of failure
+		cleanupWriterNode = true
+
 		// write node created
 		// 3. Wait for readers if any
 		for atomic.LoadInt32(&cancelled) == 0 {
@@ -225,6 +249,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 
 			if len(readers) == 0 {
 				// lock acquired
+				cleanupWriterNode = false
 				rwLock.writerLockAcquired = true
 				return nil
 			}
