@@ -5,9 +5,19 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
+	"io/ioutil"
+	"strings"
+)
+
+const (
+	pemTypeRSAPrivateKey = "RSA PRIVATE KEY"
+	pemTypePublicKey     = "PUBLIC KEY"
 )
 
 // Md5 returns the md5 checksum of the data
@@ -97,4 +107,64 @@ func pkcs5Trimming(data []byte) ([]byte, error) {
 	}
 
 	return data[:len(data)-int(padding)], nil
+}
+
+// LoadRsaPrivateKey load rsa private key from pem file
+func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
+	fileContent, err := ioutil.ReadFile(pemFile)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(fileContent)
+	if block == nil || len(block.Bytes) == 0 {
+		return nil, errors.New("invalid pem file")
+	}
+
+	if block.Type != pemTypeRSAPrivateKey {
+		return nil, errors.New("invalid key type")
+	}
+
+	var parsedKey interface{}
+	if parsedKey, err = x509.ParsePKCS1PrivateKey(block.Bytes); err != nil {
+		if parsedKey, err = x509.ParsePKCS8PrivateKey(block.Bytes); err != nil {
+			return nil, errors.New("failed to parse RSA private key")
+		}
+	}
+
+	if privateKey, ok := parsedKey.(*rsa.PrivateKey); ok {
+		return privateKey, nil
+	}
+
+	return nil, errors.New("not an RSA private key")
+}
+
+// LoadRsaPublicKey load rsa public key from pem file
+func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
+	fileContent, err := ioutil.ReadFile(pemFile)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(fileContent)
+	if block == nil || len(block.Bytes) == 0 {
+		return nil, errors.New("invalid pem file")
+	}
+
+	if !strings.HasSuffix(block.Type, pemTypePublicKey) {
+		return nil, errors.New("invalid key type")
+	}
+
+	var parsedKey interface{}
+	if parsedKey, err = x509.ParsePKIXPublicKey(block.Bytes); err != nil {
+		if parsedKey, err = x509.ParsePKCS1PublicKey(block.Bytes); err != nil {
+			return nil, errors.New("failed to parse RSA public key")
+		}
+	}
+
+	if publicKey, ok := parsedKey.(*rsa.PublicKey); ok {
+		return publicKey, nil
+	}
+
+	return nil, errors.New("not an RSA public key")
 }
