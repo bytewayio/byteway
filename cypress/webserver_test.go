@@ -2,6 +2,7 @@ package cypress
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -221,6 +222,7 @@ func TestWebServer(t *testing.T) {
 	defer sessionStore.Close()
 
 	server.AddUserProvider(&TestUserProvider{})
+	server.AddUserProvider(NewJwtUserProvider(make(map[string]*rsa.PublicKey), nil))
 	server.WithSessionOptions(sessionStore, 15*time.Minute)
 	server.WithRequestTimeout(2)
 	server.WithStandardRouting("/web")
