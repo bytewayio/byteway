@@ -109,14 +109,9 @@ func pkcs5Trimming(data []byte) ([]byte, error) {
 	return data[:len(data)-int(padding)], nil
 }
 
-// LoadRsaPrivateKey load rsa private key from pem file
-func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
-	fileContent, err := ioutil.ReadFile(pemFile)
-	if err != nil {
-		return nil, err
-	}
-
-	block, _ := pem.Decode(fileContent)
+// DecodeRsaPrivateKey decode rsa private key from pem payload
+func DecodeRsaPrivateKey(payload []byte) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(payload)
 	if block == nil || len(block.Bytes) == 0 {
 		return nil, errors.New("invalid pem file")
 	}
@@ -126,6 +121,7 @@ func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
 	}
 
 	var parsedKey interface{}
+	var err error
 	if parsedKey, err = x509.ParsePKCS1PrivateKey(block.Bytes); err != nil {
 		if parsedKey, err = x509.ParsePKCS8PrivateKey(block.Bytes); err != nil {
 			return nil, errors.New("failed to parse RSA private key")
@@ -139,14 +135,19 @@ func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
 	return nil, errors.New("not an RSA private key")
 }
 
-// LoadRsaPublicKey load rsa public key from pem file
-func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
+// LoadRsaPrivateKey load rsa private key from pem file
+func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
 	fileContent, err := ioutil.ReadFile(pemFile)
 	if err != nil {
 		return nil, err
 	}
 
-	block, _ := pem.Decode(fileContent)
+	return DecodeRsaPrivateKey(fileContent)
+}
+
+// DecodeRsaPublicKey decodes rsa public key from pem payload
+func DecodeRsaPublicKey(payload []byte) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode(payload)
 	if block == nil || len(block.Bytes) == 0 {
 		return nil, errors.New("invalid pem file")
 	}
@@ -156,6 +157,7 @@ func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
 	}
 
 	var parsedKey interface{}
+	var err error
 	if parsedKey, err = x509.ParsePKIXPublicKey(block.Bytes); err != nil {
 		if parsedKey, err = x509.ParsePKCS1PublicKey(block.Bytes); err != nil {
 			return nil, errors.New("failed to parse RSA public key")
@@ -167,4 +169,14 @@ func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
 	}
 
 	return nil, errors.New("not an RSA public key")
+}
+
+// LoadRsaPublicKey load rsa public key from pem file
+func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
+	fileContent, err := ioutil.ReadFile(pemFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return DecodeRsaPublicKey(fileContent)
 }

@@ -64,17 +64,34 @@ func (claims *jwtUserClaims) toUserPrincipal() *UserPrincipal {
 	return &jwtPrincipal.UserPrincipal
 }
 
+// JwtKeyProvider RSA public key provider for retrieving issuer public keys
+type JwtKeyProvider interface {
+	GetKey(issuer string) *rsa.PublicKey
+}
+
+// JwtKeyMap maps issuer to a public key
+type JwtKeyMap map[string]*rsa.PublicKey
+
+func (m JwtKeyMap) GetKey(issuer string) *rsa.PublicKey {
+	key, ok := m[issuer]
+	if !ok {
+		return nil
+	}
+
+	return key
+}
+
 // JwtUserProvider jwt token based user provider
 type JwtUserProvider struct {
-	keys       map[string]*rsa.PublicKey
-	userLoader UserPrincipalLoader
+	keyProvider JwtKeyProvider
+	userLoader  UserPrincipalLoader
 }
 
 // NewJwtUserProvider creates a new instances of jwt user provider
-func NewJwtUserProvider(keys map[string]*rsa.PublicKey, userLoader UserPrincipalLoader) *JwtUserProvider {
+func NewJwtUserProvider(keyProvider JwtKeyProvider, userLoader UserPrincipalLoader) *JwtUserProvider {
 	return &JwtUserProvider{
-		keys:       keys,
-		userLoader: userLoader,
+		keyProvider: keyProvider,
+		userLoader:  userLoader,
 	}
 }
 
@@ -102,7 +119,7 @@ func (provider *JwtUserProvider) Authenticate(request *http.Request) *UserPrinci
 
 		defaultClaims := new(jwt.Claims)
 		if err = token.UnsafeClaimsWithoutVerification(defaultClaims); err == nil {
-			if key, ok := provider.keys[defaultClaims.Issuer]; ok {
+			if key := provider.keyProvider.GetKey(defaultClaims.Issuer); key != nil {
 				claims := new(jwtUserClaims)
 				if err = token.Claims(key, claims); err == nil {
 					return claims.toUserPrincipal()
