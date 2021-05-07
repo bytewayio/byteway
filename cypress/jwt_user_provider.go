@@ -35,18 +35,19 @@ func (f UserPrincipalLoaderFunc) Load(domain, id string) *UserPrincipal {
 	return f(domain, id)
 }
 
-type jwtUserClaims struct {
+// JwtUserClaims Microsoft claims spec compatible user claims
+type JwtUserClaims struct {
 	jwt.Claims
-	Sid           string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid"`
-	Name          string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"`
-	AccountName   string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"`
-	Roles         []string `json:"http://schemas.microsoft.com/ws/2008/06/identity/claims/role"`
-	Domain        string   `json:"TenantId"`
-	SecurityToken string   `json:"sectok"`
-	Parent        string   `json:"ParentAccountName"`
+	Sid           string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid,omitempty"`
+	Name          string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name,omitempty"`
+	AccountName   string   `json:"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn,omitempty"`
+	Roles         []string `json:"http://schemas.microsoft.com/ws/2008/06/identity/claims/role,omitempty"`
+	Domain        string   `json:"TenantId,omitempty"`
+	SecurityToken string   `json:"sectok,omitempty"`
+	Parent        string   `json:"ParentAccountName,omitempty"`
 }
 
-func (claims *jwtUserClaims) toUserPrincipal() *UserPrincipal {
+func (claims *JwtUserClaims) toUserPrincipal() *UserPrincipal {
 	jwtPrincipal := &JwtUserPrincipal{
 		UserPrincipal: UserPrincipal{
 			ID:     claims.Sid,
@@ -119,15 +120,18 @@ func (provider *JwtUserProvider) Authenticate(request *http.Request) *UserPrinci
 
 		defaultClaims := new(jwt.Claims)
 		if err = token.UnsafeClaimsWithoutVerification(defaultClaims); err == nil {
-			if key := provider.keyProvider.GetKey(defaultClaims.Issuer); key != nil {
-				claims := new(jwtUserClaims)
-				if err = token.Claims(key, claims); err == nil {
-					return claims.toUserPrincipal()
+			keyNames := []string{defaultClaims.Issuer, defaultClaims.Issuer + "_backup"}
+			for _, keyName := range keyNames {
+				if key := provider.keyProvider.GetKey(keyName); key != nil {
+					claims := new(JwtUserClaims)
+					if err = token.Claims(key, claims); err == nil {
+						return claims.toUserPrincipal()
+					} else {
+						zap.L().Warn("failed to verify signature of jwt token", zap.String("key", keyName), zap.Error(err))
+					}
 				} else {
-					zap.L().Warn("failed to verify signature of jwt token", zap.String("key", defaultClaims.Issuer), zap.Error(err))
+					zap.L().Warn("jwt key not found", zap.String("key", keyName))
 				}
-			} else {
-				zap.L().Warn("jwt key not found", zap.String("key", defaultClaims.Issuer))
 			}
 		} else {
 			zap.L().Warn("failed to parse claims from token", zap.String("token", authToken), zap.Error(err))
