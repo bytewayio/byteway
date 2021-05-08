@@ -1,6 +1,7 @@
 package cypress
 
 import (
+	"context"
 	"crypto/rsa"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 const (
 	DefaultJwtProviderName = "JWT"
+	BackupKeyNameSuffix    = "$backup"
 	bearerAuthPrefix       = "Bearer "
 )
 
@@ -67,14 +69,25 @@ func (claims *JwtUserClaims) toUserPrincipal() *UserPrincipal {
 
 // JwtKeyProvider RSA public key provider for retrieving issuer public keys
 type JwtKeyProvider interface {
-	GetKey(issuer string) *rsa.PublicKey
+	GetKey(ctx context.Context, issuer string) *rsa.PublicKey
+	GetBackupKey(ctx context.Context, issuer string) *rsa.PublicKey
 }
 
 // JwtKeyMap maps issuer to a public key
 type JwtKeyMap map[string]*rsa.PublicKey
 
-func (m JwtKeyMap) GetKey(issuer string) *rsa.PublicKey {
+func (m JwtKeyMap) GetKey(_ context.Context, issuer string) *rsa.PublicKey {
 	key, ok := m[issuer]
+	if !ok {
+		return nil
+	}
+
+	return key
+}
+
+func (m JwtKeyMap) GetBackupKey(_ context.Context, issuer string) *rsa.PublicKey {
+	backupName := issuer + BackupKeyNameSuffix
+	key, ok := m[backupName]
 	if !ok {
 		return nil
 	}
@@ -118,11 +131,20 @@ func (provider *JwtUserProvider) Authenticate(request *http.Request) *UserPrinci
 			return nil
 		}
 
+		ctx := request.Context()
 		defaultClaims := new(jwt.Claims)
 		if err = token.UnsafeClaimsWithoutVerification(defaultClaims); err == nil {
-			keyNames := []string{defaultClaims.Issuer, defaultClaims.Issuer + "_backup"}
-			for _, keyName := range keyNames {
-				if key := provider.keyProvider.GetKey(keyName); key != nil {
+			for i := 0; i < 2; i++ {
+				var key *rsa.PublicKey
+				keyName := defaultClaims.Issuer
+				if i == 0 {
+					key = provider.keyProvider.GetKey(ctx, defaultClaims.Issuer)
+				} else {
+					key = provider.keyProvider.GetBackupKey(ctx, defaultClaims.Issuer)
+					keyName = keyName + BackupKeyNameSuffix
+				}
+
+				if key != nil {
 					claims := new(JwtUserClaims)
 					if err = token.Claims(key, claims); err == nil {
 						return claims.toUserPrincipal()
