@@ -67,7 +67,7 @@ var (
 type Response struct {
 	traceID string
 	tmplMgr *TemplateManager
-	writer  http.ResponseWriter
+	Writer  http.ResponseWriter
 }
 
 type errorPage struct {
@@ -180,22 +180,22 @@ func AsController(c interface{}) ControllerFunc {
 
 // SetHeader sets a header value for response
 func (r *Response) SetHeader(name, value string) {
-	r.writer.Header().Add(name, value)
+	r.Writer.Header().Add(name, value)
 }
 
 // SetCookie add cookie to response
 func (r *Response) SetCookie(cookie *http.Cookie) {
-	http.SetCookie(r.writer, cookie)
+	http.SetCookie(r.Writer, cookie)
 }
 
 // SetStatus sets the response status
 func (r *Response) SetStatus(statusCode int) {
-	r.writer.WriteHeader(statusCode)
+	r.Writer.WriteHeader(statusCode)
 }
 
 // Write writes content to response, compatible with writer
 func (r *Response) Write(content []byte) (int, error) {
-	return r.writer.Write(content)
+	return r.Writer.Write(content)
 }
 
 // SetNoCache sets headers for the client not to cache the response
@@ -207,7 +207,7 @@ func (r *Response) SetNoCache() {
 
 // DoneWithRedirect redirects to the specified url
 func (r *Response) DoneWithRedirect(req *http.Request, url string, status int) {
-	http.Redirect(r.writer, req, url, status)
+	http.Redirect(r.Writer, req, url, status)
 }
 
 // DoneWithContent sets the status, content-type header and writes
@@ -222,7 +222,7 @@ func (r *Response) DoneWithContent(statusCode int, contentType string, content [
 func (r *Response) DoneWithError(statusCode int, msg string) {
 	r.SetStatus(statusCode)
 	r.SetHeader("Content-Type", "text/html; charset=utf8")
-	errorTemplate.Execute(r.writer, &errorPage{statusCode, msg, ServerName, ServerVersion})
+	errorTemplate.Execute(r.Writer, &errorPage{statusCode, msg, ServerName, ServerVersion})
 }
 
 // DoneWithTemplate sets the status and write the model with the given template name as
@@ -231,16 +231,16 @@ func (r *Response) DoneWithTemplate(statusCode int, name string, model interface
 	tmpl, ok := r.tmplMgr.GetTemplate(name)
 	if !ok {
 		zap.L().Error("templateNotFound", zap.String("name", name), zap.String("activityId", r.traceID))
-		SendError(r.writer, 500, "service configuration error")
+		SendError(r.Writer, 500, "service configuration error")
 		return
 	}
 
 	r.SetStatus(statusCode)
 	r.SetHeader("Content-Type", "text/html; charset=UTF-8")
-	err := tmpl.ExecuteTemplate(r.writer, filepath.Base(name), model)
+	err := tmpl.ExecuteTemplate(r.Writer, filepath.Base(name), model)
 	if err != nil {
 		zap.L().Error("failedToExecuteTemplate", zap.Error(err), zap.String("name", name), zap.String("activityId", r.traceID))
-		errorTemplate.Execute(r.writer, &errorPage{statusCode, "template error", ServerName, ServerVersion})
+		errorTemplate.Execute(r.Writer, &errorPage{statusCode, "template error", ServerName, ServerVersion})
 		return
 	}
 }
@@ -249,7 +249,7 @@ func (r *Response) DoneWithTemplate(statusCode int, name string, model interface
 func (r *Response) DoneWithJSON(statusCode int, obj interface{}) {
 	r.SetStatus(statusCode)
 	r.SetHeader("Content-Type", "application/json; charset=UTF-8")
-	encoder := json.NewEncoder(r.writer)
+	encoder := json.NewEncoder(r.Writer)
 	err := encoder.Encode(obj)
 	if err != nil {
 		zap.L().Error("failedToEncodeJson", zap.Error(err), zap.String("activityId", r.traceID))
@@ -457,7 +457,7 @@ func (server *WebServer) routeRequest(writer http.ResponseWriter, request *http.
 				response := &Response{
 					traceID: GetTraceID(request.Context()),
 					tmplMgr: tmplMgr,
-					writer:  writer,
+					Writer:  writer,
 				}
 				handler(request, response)
 				return
