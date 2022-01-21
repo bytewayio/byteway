@@ -315,6 +315,7 @@ func (xa *XATransaction) rollback() error {
 // Close release xa transaction
 func (xa *XATransaction) Close() {
 	if xa.state == XAStatePrepared {
+		xa.conn.ExecContext(xa.ctx, "KILL CONNECTION_ID()")
 		xa.resolver.resolve(xa.id)
 	} else if xa.state == XAStateActive || xa.state == XAStateIdle {
 		if err := xa.rollback(); err != nil {
