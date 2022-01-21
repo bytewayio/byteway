@@ -30,7 +30,11 @@ jobs:
       uses: actions/checkout@v2
     
     - name: setup golang
-      uses: actions/setup-go@v2
+      run: |
+        sudo apt-get install -y wget
+        wget https://go.dev/dl/go1.18beta1.linux-amd64.tar.gz
+        tar -xvzf go1.18beta1.linux-amd64.tar.gz -C $HOME/
+        echo "$HOME/go/bin" >> $GITHUB_PATH
 
     - name: start redis
       uses: supercharge/redis-github-action@1.2.0
