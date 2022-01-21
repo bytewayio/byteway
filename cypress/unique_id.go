@@ -160,7 +160,7 @@ var pooledIDType = reflect.TypeOf((*PooledID)(nil))
 // DbUniqueIDGenerator database based unique id generator
 type DbUniqueIDGenerator struct {
 	dbAccessor *DbAccessor
-	pools      *ConcurrentMap
+	pools      *ConcurrentMap[string, *UniqueIDPool]
 }
 
 // implement UniqueIDGenerator
@@ -173,7 +173,7 @@ func isValidID(id int64) bool {
 func NewDbUniqueIDGenerator(dbAccessor *DbAccessor) *DbUniqueIDGenerator {
 	return &DbUniqueIDGenerator{
 		dbAccessor: dbAccessor,
-		pools:      NewConcurrentMapTypeEnforced(reflect.TypeOf(&UniqueIDPool{})),
+		pools:      NewConcurrentMap[string, *UniqueIDPool](),
 	}
 }
 
@@ -193,9 +193,9 @@ func (e *retryableError) Unwrap() error {
 func (generator *DbUniqueIDGenerator) NextUniqueID(ctx context.Context, name string, partition int32) (UniqueID, error) {
 	var uniqueID UniqueID
 	err := LogOperation(ctx, "GenerateUniqueId", func() error {
-		pool := generator.pools.GetOrCompute(name, func() interface{} {
+		pool := generator.pools.GetOrCompute(name, func() *UniqueIDPool {
 			return NewUniqueIDPool()
-		}).(*UniqueIDPool)
+		})
 		id, err := pool.NextID(ctx, partition)
 		if err != nil {
 			return err

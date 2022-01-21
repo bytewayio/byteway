@@ -5,7 +5,7 @@ import (
 )
 
 func TestConcurrentMap(t *testing.T) {
-	m := NewConcurrentMap()
+	m := NewConcurrentMap[string, interface{}]()
 	m.Put("key1", "value1")
 	m.Put("key2", 100)
 

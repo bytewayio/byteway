@@ -60,6 +60,35 @@ func LogExec(activityID string, start time.Time, err error) {
 	zap.L().Info("execSql", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", err == nil), zap.String("activityId", activityID))
 }
 
+func QueryOneEntity[TEntity any](ctx context.Context, queryable Queryable, mapper RowMapper, query string, args ...interface{}) (*TEntity, error) {
+	var err error
+	start := time.Now()
+	defer func(e error) {
+		latency := time.Since(start)
+		zap.L().Info("queryOne", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", e == sql.ErrNoRows || e == nil), zap.String("activityId", GetTraceID(ctx)))
+	}(err)
+	rows, err := queryable.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+
+	obj, err := mapper.Map(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	if entity, ok := obj.(*TEntity); ok {
+		return entity, nil
+	}
+
+	return nil, nil
+}
+
 // QueryOne query one object
 func QueryOne(ctx context.Context, queryable Queryable, mapper RowMapper, query string, args ...interface{}) (interface{}, error) {
 	var err error
@@ -84,6 +113,35 @@ func QueryOne(ctx context.Context, queryable Queryable, mapper RowMapper, query 
 	}
 
 	return obj, nil
+}
+
+func QueryAllEntities[TEntity any](ctx context.Context, queryable Queryable, mapper RowMapper, query string, args ...interface{}) ([]*TEntity, error) {
+	var err error
+	start := time.Now()
+	defer func(e error) {
+		latency := time.Since(start)
+		zap.L().Info("queryAll", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", e == sql.ErrNoRows || e == nil), zap.String("activityId", GetTraceID(ctx)))
+	}(err)
+
+	rows, err := queryable.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+	results := make([]*TEntity, 0, 10)
+	for rows.Next() {
+		obj, err := mapper.Map(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		if entity, ok := obj.(*TEntity); ok {
+			results = append(results, entity)
+		}
+	}
+
+	return results, nil
 }
 
 // QueryAll query all rows and map them to objects
