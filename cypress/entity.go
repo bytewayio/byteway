@@ -15,7 +15,7 @@ var (
 	// SQLIdentifierQuoteRight sql identifier quote right
 	SQLIdentifierQuoteRight = "`"
 
-	entityDescriptorsCache = NewConcurrentMapTypeEnforced(reflect.TypeOf(&EntityDescriptor{}))
+	entityDescriptorsCache = NewConcurrentMap[string, *EntityDescriptor]()
 )
 
 func quoteIdentifier(name string) string {
@@ -246,9 +246,9 @@ func GetOrCreateEntityDescriptor(entityType reflect.Type) *EntityDescriptor {
 		ty = entityType.Elem()
 	}
 
-	item := entityDescriptorsCache.GetOrCompute(entityType.PkgPath()+"/"+ty.Name(), func() interface{} {
+	item := entityDescriptorsCache.GetOrCompute(entityType.PkgPath()+"/"+ty.Name(), func() *EntityDescriptor {
 		return createEntityDescriptor(ty)
 	})
 
-	return item.(*EntityDescriptor)
+	return item
 }

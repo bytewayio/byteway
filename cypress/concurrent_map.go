@@ -1,35 +1,22 @@
 package cypress
 
 import (
-	"reflect"
 	"sync"
 )
 
 // ConcurrentMap a concurrent map
-type ConcurrentMap struct {
-	typeEnforced bool
-	enforcedType reflect.Type
-	lock         *sync.RWMutex
-	values       map[string]interface{}
+type ConcurrentMap[TKey comparable, TValue any] struct {
+	lock   *sync.RWMutex
+	values map[TKey]TValue
 }
 
 // NewConcurrentMap creates a new instance of ConcurrentMap
-func NewConcurrentMap() *ConcurrentMap {
-	return &ConcurrentMap{false, reflect.TypeOf(false), &sync.RWMutex{}, make(map[string]interface{})}
-}
-
-// NewConcurrentMapTypeEnforced create a new instance of ConcurrentMap with
-// enforcement of the value type
-func NewConcurrentMapTypeEnforced(valueType reflect.Type) *ConcurrentMap {
-	return &ConcurrentMap{true, valueType, &sync.RWMutex{}, make(map[string]interface{})}
+func NewConcurrentMap[TKey comparable, TValue any]() *ConcurrentMap[TKey, TValue] {
+	return &ConcurrentMap[TKey, TValue]{&sync.RWMutex{}, make(map[TKey]TValue)}
 }
 
 // Put puts a value to the map associate to the map and return the old value
-func (m *ConcurrentMap) Put(key string, value interface{}) (interface{}, bool) {
-	if m.typeEnforced && !reflect.TypeOf(value).AssignableTo(m.enforcedType) {
-		panic("Type for map is enforced to " + m.enforcedType.String())
-	}
-
+func (m *ConcurrentMap[TKey, TValue]) Put(key TKey, value TValue) (TValue, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	oldValue, ok := m.values[key]
@@ -38,7 +25,7 @@ func (m *ConcurrentMap) Put(key string, value interface{}) (interface{}, bool) {
 }
 
 // Foreach iterates the map and passes the key and value to the given function
-func (m *ConcurrentMap) Foreach(f func(key string, value interface{})) {
+func (m *ConcurrentMap[TKey, TValue]) Foreach(f func(key TKey, value TValue)) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	for k, v := range m.values {
@@ -48,10 +35,10 @@ func (m *ConcurrentMap) Foreach(f func(key string, value interface{})) {
 
 // RemoveIf iterates the map and delete all items that the evaluator returns true
 // returns number of items that were removed
-func (m *ConcurrentMap) RemoveIf(evaluator func(key string, value interface{}) bool) int {
+func (m *ConcurrentMap[TKey, TValue]) RemoveIf(evaluator func(key TKey, value TValue) bool) int {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	keysToRemove := make([]string, 0)
+	keysToRemove := make([]TKey, 0)
 	for k, v := range m.values {
 		if evaluator(k, v) {
 			keysToRemove = append(keysToRemove, k)
@@ -66,14 +53,14 @@ func (m *ConcurrentMap) RemoveIf(evaluator func(key string, value interface{}) b
 }
 
 // Delete deletes the specified key from the map
-func (m *ConcurrentMap) Delete(key string) {
+func (m *ConcurrentMap[TKey, TValue]) Delete(key TKey) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	delete(m.values, key)
 }
 
 // Get gets a value for the given key if it exists
-func (m *ConcurrentMap) Get(key string) (interface{}, bool) {
+func (m *ConcurrentMap[TKey, TValue]) Get(key TKey) (TValue, bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	value, ok := m.values[key]
@@ -81,7 +68,7 @@ func (m *ConcurrentMap) Get(key string) (interface{}, bool) {
 }
 
 // Len gets the length of the underlying values
-func (m *ConcurrentMap) Len() int {
+func (m *ConcurrentMap[TKey, TValue]) Len() int {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return len(m.values)
@@ -89,8 +76,8 @@ func (m *ConcurrentMap) Len() int {
 
 // GetOrCompute gets a value from map if it does not exist
 // compute the value from the given generator
-func (m *ConcurrentMap) GetOrCompute(key string, generator func() interface{}) interface{} {
-	var value interface{}
+func (m *ConcurrentMap[TKey, TValue]) GetOrCompute(key TKey, generator func() TValue) TValue {
+	var value TValue
 	var ok bool
 	func() {
 		m.lock.RLock()
@@ -107,10 +94,6 @@ func (m *ConcurrentMap) GetOrCompute(key string, generator func() interface{}) i
 	value, ok = m.values[key]
 	if !ok {
 		value = generator()
-		if m.typeEnforced && !reflect.TypeOf(value).AssignableTo(m.enforcedType) {
-			panic("Type for map is enforced to " + m.enforcedType.String())
-		}
-
 		m.values[key] = value
 	}
 
