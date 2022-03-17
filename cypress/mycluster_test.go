@@ -262,6 +262,17 @@ func TestClusterUpdate(t *testing.T) {
 			return nil
 		}
 
+		// using generic accessor helper function
+		b1, err := AccessorGetOne(context.Background(), cluster.GetDbAccessorByID(b.ID), b)
+		if err != nil {
+			return err
+		}
+
+		if b1.Amount != 100 {
+			t.Error("unexpected data after insert", b1.Amount)
+			return nil
+		}
+
 		b = item.(*balance)
 		b.Amount = 200
 		_, err = cluster.GetDbAccessorByID(b.ID).Update(context.Background(), b)
@@ -383,6 +394,17 @@ func TestClusterGetAll(t *testing.T) {
 
 		if len(all) != 2 {
 			t.Error("unexpected number of partitions", len(all))
+			return nil
+		}
+
+		// using generic ClusterGetAll
+		balances, err := ClusterGetAll[balance](context.Background(), cluster, "select * from `balance`")
+		if err != nil {
+			return err
+		}
+
+		if len(balances) > 2 {
+			t.Error("unexpected number of partitions", len(balances))
 			return nil
 		}
 
@@ -587,6 +609,20 @@ func TestMultiKeyCURD(t *testing.T) {
 		if len(all) != 0 {
 			t.Error("unexpected number of rows", len(all))
 			return errors.New("unexpected number of rows")
+		}
+
+		entries, err := AccessorQueryAll[multiKeyEntity](
+			context.Background(),
+			cluster.GetDbAccessorByKey("key2"),
+			"select * from multi_key_entity",
+			NewSmartMapper(reflect.TypeOf((*multiKeyEntity)(nil))))
+		if err != nil {
+			return err
+		}
+
+		if len(entries) != 0 {
+			t.Error("unexpected number of rows", len(entries))
+			return nil
 		}
 
 		return nil
