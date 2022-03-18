@@ -22,4 +22,6 @@ type Txn interface {
 	QueryOne(sql string, mapper RowMapper, args ...interface{}) (interface{}, error)
 
 	QueryAll(sql string, mapper RowMapper, args ...interface{}) ([]interface{}, error)
+
+	QueryAllWithCollector(sql string, mapper RowMapper, collector DataCollector, args ...interface{}) error
 }
