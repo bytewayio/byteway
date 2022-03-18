@@ -1,36 +1,36 @@
 package cypress
 
 // Comparer interface for comparing objects
-type Comparer interface {
-	Compare(lh interface{}, rh interface{}) int
+type Comparer[T any] interface {
+	Compare(lh T, rh T) int
 }
 
 // CompareFunc function implements Comparer
-type CompareFunc func(interface{}, interface{}) int
+type CompareFunc[T any] func(T, T) int
 
 // Compare implements Comparer
-func (f CompareFunc) Compare(lh interface{}, rh interface{}) int {
+func (f CompareFunc[T]) Compare(lh T, rh T) int {
 	return f(lh, rh)
 }
 
 // PageMerger a tool to merge multiple paged query results into one page
-type PageMerger struct {
+type PageMerger[T any] struct {
 	pageSize int
-	comparer Comparer
+	comparer Comparer[T]
 }
 
 // NewPageMerger create a new page merger
-func NewPageMerger(pageSize int, comparer Comparer) *PageMerger {
-	return &PageMerger{
+func NewPageMerger[T any](pageSize int, comparer Comparer[T]) *PageMerger[T] {
+	return &PageMerger[T]{
 		pageSize: pageSize,
 		comparer: comparer,
 	}
 }
 
 // Merge merge lists into a single sorted list and only return the top `pageSize` items of all lists
-func (m *PageMerger) Merge(lists ...[]interface{}) []interface{} {
-	emulators := make([][]interface{}, 0)
-	results := make([]interface{}, 0)
+func (m *PageMerger[T]) Merge(lists ...[]T) []T {
+	emulators := make([][]T, 0)
+	results := make([]T, 0)
 	if len(lists) > 0 {
 		for _, l := range lists {
 			if len(l) > 0 {
@@ -47,7 +47,7 @@ func (m *PageMerger) Merge(lists ...[]interface{}) []interface{} {
 		}
 
 		for len(results) < m.pageSize {
-			var entity interface{} = nil
+			var entity T
 			idx := -1
 			for i, l := range emulators {
 				if (status[i] & 1) != 0 {

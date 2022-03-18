@@ -511,6 +511,19 @@ func (xa *XATransaction) QueryAll(query string, mapper RowMapper, args ...interf
 	return result, err
 }
 
+func (xa *XATransaction) QueryAllWithCollector(query string, mapper RowMapper, collector DataCollector, args ...interface{}) error {
+	return LogOperation(xa.ctx, "QueryAllWithCollector", func() error {
+		if xa.state == XAStateUnknown {
+			e := xa.Begin()
+			if e != nil {
+				return e
+			}
+		}
+
+		return QueryAllWithCollector(xa.ctx, xa.conn, mapper, query, collector, args...)
+	})
+}
+
 // MyClusterTxn cluster supported 2PC transaction
 type MyClusterTxn struct {
 	id            string

@@ -340,7 +340,12 @@ func (cluster *MyCluster) UpdateAt(ctx context.Context, partition int32, entity 
 }
 
 // QueryOne query one entity with the given mapper
-func (cluster *MyCluster) QueryOne(ctx context.Context, query string, mapper RowMapper, aggregator func(interface{}, interface{}) interface{}, args ...interface{}) (interface{}, error) {
+func (cluster *MyCluster) QueryOne(
+	ctx context.Context,
+	query string,
+	mapper RowMapper,
+	aggregator func(interface{}, interface{}) interface{},
+	args ...interface{}) (interface{}, error) {
 	if aggregator == nil {
 		return nil, errors.New("aggregator cannot be nil")
 	}
@@ -370,7 +375,12 @@ func (cluster *MyCluster) QueryOne(ctx context.Context, query string, mapper Row
 }
 
 // GetOne query one entity by the given prototype
-func (cluster *MyCluster) GetOne(ctx context.Context, ty reflect.Type, query string, aggregator func(interface{}, interface{}) interface{}, args ...interface{}) (interface{}, error) {
+func (cluster *MyCluster) GetOne(
+	ctx context.Context,
+	ty reflect.Type,
+	query string,
+	aggregator func(interface{}, interface{}) interface{},
+	args ...interface{}) (interface{}, error) {
 	return cluster.QueryOne(ctx, query, NewSmartMapper(ty), aggregator, args...)
 }
 
@@ -391,13 +401,43 @@ func (cluster *MyCluster) QueryAll(ctx context.Context, query string, mapper Row
 	return values, nil
 }
 
+func (cluster *MyCluster) QueryAllWithCollector(
+	ctx context.Context,
+	query string,
+	mapper RowMapper,
+	creator DataCollectorCreator,
+	args ...interface{}) error {
+	for _, p := range cluster.partitions {
+		err := p.QueryAllWithCollector(ctx, query, mapper, creator.Create(), args...)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GetAll get all entities from all partition by the given prototype
 func (cluster *MyCluster) GetAll(ctx context.Context, ty reflect.Type, query string, args ...interface{}) ([][]interface{}, error) {
 	return cluster.QueryAll(ctx, query, NewSmartMapper(ty), args...)
 }
 
+func (cluster *MyCluster) GetAllWithCollector(
+	ctx context.Context,
+	ty reflect.Type,
+	query string,
+	creator DataCollectorCreator,
+	args ...interface{}) error {
+	return cluster.QueryAllWithCollector(ctx, query, NewSmartMapper(ty), creator, args...)
+}
+
 // QueryAllReduced query all entities and apply the reducer
-func (cluster *MyCluster) QueryAllReduced(ctx context.Context, query string, mapper RowMapper, reducer func([][]interface{}) []interface{}, args ...interface{}) ([]interface{}, error) {
+func (cluster *MyCluster) QueryAllReduced(
+	ctx context.Context,
+	query string,
+	mapper RowMapper,
+	reducer func([][]interface{}) []interface{},
+	args ...interface{}) ([]interface{}, error) {
 	results, err := cluster.QueryAll(ctx, query, mapper, args...)
 	if err != nil {
 		return nil, err
@@ -407,12 +447,22 @@ func (cluster *MyCluster) QueryAllReduced(ctx context.Context, query string, map
 }
 
 // GetAllReduced get all entries and apply the reduce
-func (cluster *MyCluster) GetAllReduced(ctx context.Context, ty reflect.Type, query string, reducer func([][]interface{}) []interface{}, args ...interface{}) ([]interface{}, error) {
+func (cluster *MyCluster) GetAllReduced(
+	ctx context.Context,
+	ty reflect.Type,
+	query string,
+	reducer func([][]interface{}) []interface{},
+	args ...interface{}) ([]interface{}, error) {
 	return cluster.QueryAllReduced(ctx, query, NewSmartMapper(ty), reducer, args...)
 }
 
 // QueryPage query a page of entities by the given page merger
-func (cluster *MyCluster) QueryPage(ctx context.Context, query string, mapper RowMapper, merger *PageMerger, args ...interface{}) ([]interface{}, error) {
+func (cluster *MyCluster) QueryPage(
+	ctx context.Context,
+	query string,
+	mapper RowMapper,
+	merger *PageMerger[any],
+	args ...interface{}) ([]interface{}, error) {
 	results, err := cluster.QueryAll(ctx, query, mapper, args...)
 	if err != nil {
 		return nil, err
@@ -422,6 +472,11 @@ func (cluster *MyCluster) QueryPage(ctx context.Context, query string, mapper Ro
 }
 
 // GetPage get a page of entities by the given prototype
-func (cluster *MyCluster) GetPage(ctx context.Context, ty reflect.Type, query string, merger *PageMerger, args ...interface{}) ([]interface{}, error) {
+func (cluster *MyCluster) GetPage(
+	ctx context.Context,
+	ty reflect.Type,
+	query string,
+	merger *PageMerger[any],
+	args ...interface{}) ([]interface{}, error) {
 	return cluster.QueryPage(ctx, query, NewSmartMapper(ty), merger, args...)
 }

@@ -61,7 +61,7 @@ func ClusterGetAll[T any](ctx context.Context, cluster *MyCluster, query string,
 	return ClusterQueryAll[T](ctx, cluster, query, NewSmartMapper(reflect.TypeOf((*T)(nil)).Elem()), args...)
 }
 
-func ClusterQueryPage[T any](ctx context.Context, cluster *MyCluster, query string, mapper RowMapper, merger *PageMerger, args ...interface{}) ([]*T, error) {
+func ClusterQueryPage[T any](ctx context.Context, cluster *MyCluster, query string, mapper RowMapper, merger *PageMerger[any], args ...interface{}) ([]*T, error) {
 	results, err := cluster.QueryPage(ctx, query, mapper, merger, args...)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func ClusterQueryPage[T any](ctx context.Context, cluster *MyCluster, query stri
 	return items, nil
 }
 
-func ClusterGetPage[T any](ctx context.Context, cluster *MyCluster, query string, merger *PageMerger, args ...interface{}) ([]*T, error) {
+func ClusterGetPage[T any](ctx context.Context, cluster *MyCluster, query string, merger *PageMerger[any], args ...interface{}) ([]*T, error) {
 	return ClusterQueryPage[T](ctx, cluster, query, NewSmartMapper(reflect.TypeOf((*T)(nil))), merger, args...)
 }
 

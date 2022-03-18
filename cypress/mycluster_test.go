@@ -476,6 +476,21 @@ func TestClusterTxnWithSuccess(t *testing.T) {
 			t.Error("unexpected number of entities", count)
 		}
 
+		collectorCreator := NewSliceCollectorCreator[balance]()
+		err = cluster.GetAllWithCollector(context.Background(), reflect.TypeOf((*balance)(nil)), "select * from `balance`", collectorCreator)
+		if len(collectorCreator.Collectors) != 2 {
+			t.Error("unexpected number of partitions", len(collectorCreator.Collectors))
+			return nil
+		}
+
+		count = 0
+		for _, l := range collectorCreator.Collectors {
+			count += len(l.Results)
+		}
+
+		if count != 2 {
+			t.Error("unexpected number of entities", count)
+		}
 		return nil
 	})
 }
@@ -621,6 +636,23 @@ func TestMultiKeyCURD(t *testing.T) {
 		}
 
 		if len(entries) != 0 {
+			t.Error("unexpected number of rows", len(entries))
+			return nil
+		}
+
+		entries2 := make([]*multiKeyEntity, 0)
+		err = cluster.GetDbAccessorByKey("key2").QueryAllWithCollector(
+			context.Background(),
+			"select * from multi_key_entity",
+			NewSmartMapper(reflect.TypeOf((*multiKeyEntity)(nil))),
+			DataCollectorFunc[multiKeyEntity](func(entry *multiKeyEntity) {
+				entries2 = append(entries2, entry)
+			}))
+		if err != nil {
+			return err
+		}
+
+		if len(entries2) != 0 {
 			t.Error("unexpected number of rows", len(entries))
 			return nil
 		}

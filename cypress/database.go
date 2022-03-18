@@ -21,6 +21,16 @@ type Queryable interface {
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
+// Data collector to collect query results
+type DataCollector interface {
+	Collect(item interface{})
+}
+
+// Data collectors creator to create data collectors for query results
+type DataCollectorCreator interface {
+	Create() DataCollector
+}
+
 // DataRow data row, which can be used to scan values or get column information
 type DataRow interface {
 	ColumnTypes() ([]*sql.ColumnType, error)
@@ -54,10 +64,78 @@ func (resolver TableNameResolverFunc) Resolve(name string) string {
 	return resolver(name)
 }
 
+type DataCollectorFunc[T any] func(item *T)
+
+func (collector DataCollectorFunc[T]) Collect(item interface{}) {
+	if t, ok := item.(*T); ok {
+		collector(t)
+	}
+}
+
+type SliceCollector[T any] struct {
+	Results []*T
+}
+
+func NewSliceCollector[T any]() *SliceCollector[T] {
+	return &SliceCollector[T]{
+		Results: make([]*T, 0),
+	}
+}
+
+func (collector *SliceCollector[T]) Collect(item interface{}) {
+	if t, ok := item.(*T); ok {
+		collector.Results = append(collector.Results, t)
+	}
+}
+
+type CollectorCreatorFunc func() DataCollector
+
+func (creator CollectorCreatorFunc) Create() DataCollector {
+	return creator()
+}
+
+type SliceCollectorCreator[T any] struct {
+	Collectors []*SliceCollector[T]
+}
+
+func NewSliceCollectorCreator[T any]() *SliceCollectorCreator[T] {
+	return &SliceCollectorCreator[T]{
+		make([]*SliceCollector[T], 0),
+	}
+}
+
+func (creator *SliceCollectorCreator[T]) Create() DataCollector {
+	collector := NewSliceCollector[T]()
+	creator.Collectors = append(creator.Collectors, collector)
+	return collector
+}
+
+func (creator *SliceCollectorCreator[T]) MergeResults(merger *PageMerger[*T]) []*T {
+	results := make([][]*T, len(creator.Collectors))
+	for i, c := range creator.Collectors {
+		results[i] = c.Results
+	}
+
+	return merger.Merge(results...)
+}
+
+func (creator *SliceCollectorCreator[T]) GetResults() [][]*T {
+	results := make([][]*T, len(creator.Collectors))
+	for i, c := range creator.Collectors {
+		results[i] = c.Results
+	}
+
+	return results
+}
+
 // LogExec log the sql Exec call result
 func LogExec(activityID string, start time.Time, err error) {
 	latency := time.Since(start)
-	zap.L().Info("execSql", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", err == nil), zap.String("activityId", activityID))
+	zap.L().Info(
+		"execSql",
+		zap.Int("latency", int(latency.Seconds()*1000)),
+		zap.Bool("success", err == nil),
+		zap.String("activityId", activityID))
 }
 
 func QueryOneEntity[TEntity any](ctx context.Context, queryable Queryable, mapper RowMapper, query string, args ...interface{}) (*TEntity, error) {
@@ -65,7 +143,12 @@ func QueryOneEntity[TEntity any](ctx context.Context, queryable Queryable, mappe
 	start := time.Now()
 	defer func(e error) {
 		latency := time.Since(start)
-		zap.L().Info("queryOne", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", e == sql.ErrNoRows || e == nil), zap.String("activityId", GetTraceID(ctx)))
+		zap.L().Info(
+			"queryOne",
+			zap.Int("latency",
+				int(latency.Seconds()*1000)),
+			zap.Bool("success", e == sql.ErrNoRows || e == nil),
+			zap.String("activityId", GetTraceID(ctx)))
 	}(err)
 	rows, err := queryable.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -170,6 +253,32 @@ func QueryAll(ctx context.Context, queryable Queryable, mapper RowMapper, query 
 	}
 
 	return results, nil
+}
+
+func QueryAllWithCollector(ctx context.Context, queryable Queryable, mapper RowMapper, query string, collector DataCollector, args ...interface{}) error {
+	var err error
+	start := time.Now()
+	defer func(e error) {
+		latency := time.Since(start)
+		zap.L().Info("queryAll", zap.Int("latency", int(latency.Seconds()*1000)), zap.Bool("success", e == sql.ErrNoRows || e == nil), zap.String("activityId", GetTraceID(ctx)))
+	}(err)
+
+	rows, err := queryable.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+
+	defer rows.Close()
+	for rows.Next() {
+		obj, err := mapper.Map(rows)
+		if err != nil {
+			return err
+		}
+
+		collector.Collect(obj)
+	}
+
+	return nil
 }
 
 // DbTxn db transaction wrapper with context
@@ -309,6 +418,12 @@ func (txn *DbTxn) QueryAll(query string, mapper RowMapper, args ...interface{}) 
 	})
 
 	return result, err
+}
+
+func (txn *DbTxn) QueryAllWithCollector(query string, mapper RowMapper, collector DataCollector, args ...interface{}) error {
+	return LogOperation(txn.ctx, "QueryAllWithCollector", func() error {
+		return QueryAllWithCollector(txn.ctx, txn.tx, mapper, query, collector, args...)
+	})
 }
 
 // Rollback rollback the transaction
@@ -483,6 +598,12 @@ func (accessor *DbAccessor) QueryAll(ctx context.Context, query string, mapper R
 	})
 
 	return result, err
+}
+
+func (accessor *DbAccessor) QueryAllWithCollector(ctx context.Context, query string, mapper RowMapper, collector DataCollector, args ...interface{}) error {
+	return LogOperation(ctx, "QueryAll", func() error {
+		return QueryAllWithCollector(ctx, accessor.db, mapper, query, collector, args...)
+	})
 }
 
 // BeginTxnWithIsolation starts a new transaction
