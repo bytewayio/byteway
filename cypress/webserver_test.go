@@ -64,10 +64,23 @@ func (p *TestUserProvider) Load(domain, id string) *UserPrincipal {
 	}
 }
 
-type TestWsListener struct{}
+type TestWsListener struct {
+	t *testing.T
+}
 
 func (l *TestWsListener) OnConnect(session *WebSocketSession) {
 	fmt.Println("a websocket with session id", session.Session.ID, "is connected")
+	count := 0
+	for key, value := range session.Context {
+		if values, ok := value.([]string); ok {
+			fmt.Println("key:", key, "values:", strings.Join(values, ","))
+			count += 1
+		}
+	}
+
+	if count != 2 {
+		l.t.Error("not able to get query parameters from websocket session context")
+	}
 }
 
 func (l *TestWsListener) OnClose(session *WebSocketSession, reason int) {
@@ -227,7 +240,7 @@ func TestWebServer(t *testing.T) {
 	server.WithRequestTimeout(2)
 	server.WithStandardRouting("/web")
 	server.WithCaptcha("/captcha")
-	server.AddWsEndoint("/ws/echo", &TestWsListener{})
+	server.AddWsEndoint("/ws/echo", &TestWsListener{t: t})
 	server.RegisterController("test", ControllerFunc(func() []Action { return testActions(t) }))
 	server.RegisterController("test1", AsController(&TestController{}))
 	server.WithCustomHandler(CustomHandlerFunc(printSessionID))
@@ -462,7 +475,7 @@ func TestWebServer(t *testing.T) {
 	defer resp.Body.Close()
 
 	// try websocket
-	c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8099/ws/echo", nil)
+	c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8099/ws/echo?name1=value1&name2=value2&name2=value3", nil)
 	if err != nil {
 		t.Error("dial:", err)
 		DumpBufferWriter(t, writer)

@@ -165,6 +165,11 @@ func (handler *WebSocketHandler) Handle(writer http.ResponseWriter, request *htt
 		&sync.Mutex{},
 		&sync.Mutex{},
 	}
+
+	for key, value := range request.URL.Query() {
+		webSocketSession.Context[key] = value
+	}
+
 	handler.Listener.OnConnect(webSocketSession)
 	go handler.connectionLoop(webSocketSession)
 }
