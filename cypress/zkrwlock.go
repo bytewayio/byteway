@@ -223,7 +223,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 		}
 
 		// 2. Create writer node
-		_, err = rwLock.conn.Create(rwLock.writerPath, []byte{}, 0, zk.WorldACL(zk.PermAll))
+		_, err = rwLock.conn.Create(rwLock.writerPath, []byte{}, zk.FlagEphemeral, zk.WorldACL(zk.PermAll))
 		if err == zk.ErrNodeExists {
 			continue
 		}
