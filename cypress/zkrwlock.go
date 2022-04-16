@@ -213,7 +213,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 				if event.Type != zk.EventNodeDeleted {
 					releaseLocalLock = true
 					zap.L().Error("unexpected node event", zap.String("node", rwLock.writerPath), zap.Int32("event", int32(event.Type)), zap.String("trace", GetTraceID(ctx)))
-					return err
+					return ErrLockFailed
 				}
 				break
 			case <-cancelChannel:
