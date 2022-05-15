@@ -29,7 +29,7 @@ func TestZkLockRelease(t *testing.T) {
 	defer conn.Delete("/locks1", 0)
 
 	lock := NewZkLock(conn, "/locks1/test1")
-	err = lock.Lock(context.Background())
+	_, err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
@@ -38,7 +38,7 @@ func TestZkLockRelease(t *testing.T) {
 
 	lock.Release()
 
-	err = lock.Lock(context.Background())
+	_, err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
@@ -91,14 +91,14 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 	<-ch
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
-	err = lock2.Lock(ctx)
+	_, err = lock2.Lock(ctx)
 	if err != ErrLockCancelled {
 		t.Error("lock expected to be failed with ErrLockCancelled", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	err = lock2.Lock(context.Background())
+	_, err = lock2.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with background context", err)
 		DumpBufferWriter(t, writer)
@@ -133,7 +133,7 @@ func TestZkLockCancelled(t *testing.T) {
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	cancelFunc()
-	err = lock.Lock(ctx)
+	_, err = lock.Lock(ctx)
 	if err != ErrLockCancelled {
 		t.Error("lock expected to be failed with ErrLockCancelled", err)
 		DumpBufferWriter(t, writer)
@@ -177,7 +177,7 @@ func TestZkLockWithContention(t *testing.T) {
 	proc := func(lock *ZkLock) {
 		for i := 0; i < 100; i++ {
 			func() {
-				e1 := lock.Lock(context.Background())
+				_, e1 := lock.Lock(context.Background())
 				if e1 != nil {
 					t.Error("failed to lock with contention", e1)
 					DumpBufferWriter(t, writer)
@@ -228,7 +228,7 @@ func TestZkLockWithSameInstanceContention(t *testing.T) {
 	proc := func(lock *ZkLock) {
 		for i := 0; i < 100; i++ {
 			func() {
-				e1 := lock.Lock(context.Background())
+				_, e1 := lock.Lock(context.Background())
 				if e1 != nil {
 					t.Error("failed to lock with contention", e1)
 					DumpBufferWriter(t, writer)

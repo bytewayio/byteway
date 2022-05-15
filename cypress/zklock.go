@@ -18,7 +18,22 @@ var (
 	ErrLockCancelled = errors.New("context cancelled before lock is acquired")
 )
 
+type LockContext map[string]interface{}
+
+type DistributedLocker interface {
+	Lock(ctx context.Context) (LockContext, error)
+	Unlock(lockCtx LockContext)
+}
+
+type DistributedSharedLocker interface {
+	RLock(ctx context.Context) (LockContext, error)
+	RUnlock(lockCtx LockContext)
+	Lock(ctx context.Context) (LockContext error)
+	Unlock(lockCtx LockContext)
+}
+
 // ZkLock zookeeper based distributed lock
+// This lock does not rely on sequential numbers, but may lead to starvation issue
 type ZkLock struct {
 	conn      *zk.Conn
 	path      string
@@ -34,7 +49,7 @@ func NewZkLock(conn *zk.Conn, path string) *ZkLock {
 }
 
 // Lock lock or return error if not able to lock
-func (lock *ZkLock) Lock(ctx context.Context) error {
+func (lock *ZkLock) Lock(ctx context.Context) (LockContext, error) {
 	lock.localLock.Lock()
 	unlockLocal := true
 	defer func() {
@@ -65,7 +80,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 		exists, _, ch, err := lock.conn.ExistsW(lock.path)
 		if err != nil {
 			zap.L().Error("failed to check node", zap.String("path", lock.path), zap.Error(err))
-			return ErrLockFailed
+			return nil, ErrLockFailed
 		}
 
 		if !exists {
@@ -75,7 +90,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 				event := <-ch
 				if event.Type != zk.EventNodeCreated {
 					zap.L().Error("unexpected event, NodeCreated is expected", zap.String("path", lock.path), zap.Int32("event", int32(event.Type)))
-					return ErrLockFailed
+					return nil, ErrLockFailed
 				}
 
 				lock.acquired = true
@@ -85,11 +100,11 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 				event := <-ch
 				if event.Type != zk.EventNodeCreated {
 					zap.L().Error("unexpected event type", zap.String("path", lock.path), zap.Int32("type", int32(event.Type)))
-					return ErrLockFailed
+					return nil, ErrLockFailed
 				}
 			} else {
 				zap.L().Error("unexpected create error", zap.String("path", lock.path), zap.Error(err))
-				return ErrLockFailed
+				return nil, ErrLockFailed
 			}
 		} else {
 			// wait for lock to be released or cancel event
@@ -97,7 +112,7 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 			case event := <-ch:
 				if event.Type != zk.EventNodeDeleted {
 					zap.L().Error("unexpected event type", zap.String("path", lock.path), zap.Int32("type", int32(event.Type)))
-					return ErrLockFailed
+					return nil, ErrLockFailed
 				}
 				break
 			case <-cancelChannel:
@@ -113,10 +128,10 @@ func (lock *ZkLock) Lock(ctx context.Context) error {
 			lock.Release()
 		}
 
-		return ErrLockCancelled
+		return nil, ErrLockCancelled
 	}
 
-	return nil
+	return nil, nil
 }
 
 // Release release the lock, ignore all errors
@@ -131,6 +146,6 @@ func (lock *ZkLock) Release() {
 }
 
 // Unlock release the lock, alias of Release
-func (lock *ZkLock) Unlock() {
+func (lock *ZkLock) Unlock(lockCtx LockContext) {
 	lock.Release()
 }
