@@ -219,7 +219,7 @@ func TestZkLock2WithContention(t *testing.T) {
 		return
 	}
 
-	defer conn.Delete("locks4/test4", 0)
+	defer conn.Delete("/locks4/test4", 0)
 
 	counter := 0
 	ch := make(chan int32, 1)
