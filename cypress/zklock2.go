@@ -2,7 +2,6 @@ package cypress
 
 import (
 	"context"
-	"errors"
 	"math"
 	"strconv"
 
@@ -23,6 +22,62 @@ const (
 type ZkLock2 struct {
 	conn *zk.Conn
 	path string
+}
+
+func findLeastSeqAndPrevNode(nodes []string, prefix string, target int64) (int64, string, error) {
+	var minPositiveSeqNumber int64 = -1
+	var prevSeqNumber int64 = math.MinInt64
+	var maxSeqNumber int64 = math.MinInt64
+	prevSeqNode := ""
+	maxSeqNode := ""
+
+	var minNegativeSeqNumber int64 = 0
+
+	for _, v := range nodes {
+		seq, err := strconv.ParseInt(v[len(lockPrefix):], 10, 64)
+		if err != nil {
+			zap.L().Error("unexpected lock sequential node", zap.Error(err), zap.String("node", v))
+			return 0, "", err
+		}
+
+		if seq > maxSeqNumber {
+			maxSeqNumber = seq
+			maxSeqNode = v
+		}
+
+		if seq < target && seq > prevSeqNumber {
+			prevSeqNumber = seq
+			prevSeqNode = v
+		}
+
+		if seq >= 0 && (minPositiveSeqNumber < 0 || seq < minPositiveSeqNumber) {
+			minPositiveSeqNumber = seq
+		} else if seq < 0 && (minNegativeSeqNumber >= 0 || seq < minNegativeSeqNumber) {
+			minNegativeSeqNumber = seq
+		}
+	}
+
+	var minSeqNumber int64 = math.MinInt64
+	if minNegativeSeqNumber >= 0 {
+		minSeqNumber = minPositiveSeqNumber
+	} else if minPositiveSeqNumber < 0 {
+		minSeqNumber = minNegativeSeqNumber
+	} else if minPositiveSeqNumber > (int64(math.MaxInt32) - ZkLock2MaxConcurrentThreads) {
+		minSeqNumber = minPositiveSeqNumber
+	} else {
+		minSeqNumber = minNegativeSeqNumber
+	}
+
+	prevNode := ""
+	if minSeqNumber != target {
+		if prevSeqNumber > math.MinInt64 {
+			prevNode = prevSeqNode
+		} else {
+			prevNode = maxSeqNode
+		}
+	}
+
+	return minSeqNumber, prevNode, nil
 }
 
 // NewZkLock creates a new ZkLock2 on the given path
@@ -56,7 +111,7 @@ func (lock *ZkLock2) Lock(ctx context.Context) (LockContext, error) {
 	// Set flag and get a number that is greater than any other signed numbers
 	// which is implemented in zookeeper as create a sequential node under a
 	// lock container
-	lockPath, err := lock.conn.CreateProtectedEphemeralSequential(lock.path+"/"+lockPrefix, []byte{}, zk.WorldACL(zk.PermAll))
+	lockPath, err := lock.conn.Create(lock.path+"/"+lockPrefix, []byte{}, zk.FlagEphemeral|zk.FlagSequence, zk.WorldACL(zk.PermAll))
 	if err != nil {
 		zap.L().Error("failed to create lock sequential node", zap.String("path", lock.path+"/"+lockPrefix), zap.Error(err))
 		doneChan <- true
@@ -88,42 +143,11 @@ func (lock *ZkLock2) Lock(ctx context.Context) (LockContext, error) {
 			return nil, err
 		}
 
-		var minPositiveSeqNumber int64 = -1
-		minPositiveNode := ""
-		var minNegativeSeqNumber int64 = 0
-		minNegativeNode := ""
-
-		for _, v := range children {
-			seq, err := strconv.ParseInt(v[len(lockPrefix)+1:], 10, 64)
-			if err != nil {
-				zap.L().Error("unexpected lock sequential node", zap.Error(err), zap.String("node", v))
-				doneChan <- true
-				return nil, err
-			}
-
-			if seq > 0 && (minPositiveSeqNumber < 0 || seq < minPositiveSeqNumber) {
-				minPositiveSeqNumber = seq
-				minPositiveNode = v
-			} else if seq < 0 && (minNegativeSeqNumber >= 0 || seq < minNegativeSeqNumber) {
-				minNegativeSeqNumber = seq
-				minNegativeNode = v
-			}
-		}
-
-		var minSeqNumber int64 = math.MinInt64
-		minNode := ""
-		if minNegativeSeqNumber >= 0 {
-			minSeqNumber = minPositiveSeqNumber
-			minNode = minPositiveNode
-		} else if minPositiveSeqNumber < 0 {
-			minSeqNumber = minNegativeSeqNumber
-			minNode = minNegativeNode
-		} else if minPositiveSeqNumber > (int64(math.MaxInt32) - ZkLock2MaxConcurrentThreads) {
-			minSeqNumber = minPositiveSeqNumber
-			minNode = minPositiveNode
-		} else {
-			minSeqNumber = minNegativeSeqNumber
-			minNode = minNegativeNode
+		minSeqNumber, prevNode, err := findLeastSeqAndPrevNode(children, lockPrefix, seqNumber)
+		if err != nil {
+			zap.L().Error("bad sequential node detected", zap.Error(err), zap.String("path", lock.path))
+			doneChan <- true
+			return nil, err
 		}
 
 		if seqNumber == minSeqNumber {
@@ -134,9 +158,9 @@ func (lock *ZkLock2) Lock(ctx context.Context) (LockContext, error) {
 			}, nil
 		}
 
-		exists, _, ch, err := lock.conn.ExistsW(lock.path + "/" + minNode)
+		exists, _, ch, err := lock.conn.ExistsW(lock.path + "/" + prevNode)
 		if err != nil {
-			zap.L().Error("failed to watch on lock node", zap.Error(err), zap.String("node", minNode))
+			zap.L().Error("failed to watch on lock node", zap.Error(err), zap.String("node", prevNode))
 			doneChan <- true
 			return nil, err
 		}
@@ -146,8 +170,7 @@ func (lock *ZkLock2) Lock(ctx context.Context) (LockContext, error) {
 		}
 	}
 
-	doneChan <- true
-	return nil, errors.New("operation cancelled")
+	return nil, ErrLockCancelled
 }
 
 func (lock *ZkLock2) Unlock(lockCtx LockContext) {
