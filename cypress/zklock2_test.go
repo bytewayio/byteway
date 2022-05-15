@@ -8,7 +8,7 @@ import (
 	"github.com/go-zookeeper/zk"
 )
 
-func TestZkLockRelease(t *testing.T) {
+func TestZkLock2Release(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -28,27 +28,34 @@ func TestZkLockRelease(t *testing.T) {
 
 	defer conn.Delete("/locks1", 0)
 
-	lock := NewZkLock(conn, "/locks1/test1")
-	_, err = lock.Lock(context.Background())
+	lock, err := NewZkLock2(conn, "/locks1/test1")
+	if err != nil {
+		t.Error("failed to create lock node", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks1/test1", 0)
+	lockCtx, err := lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	lock.Release()
+	lock.Unlock(lockCtx)
 
-	_, err = lock.Lock(context.Background())
+	lockCtx, err = lock.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with single process", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	lock.Release()
+	lock.Unlock(lockCtx)
 }
 
-func TestZkLockWithCancelledByTimeout(t *testing.T) {
+func TestZkLock2WithCancelledByTimeout(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -77,12 +84,31 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 
 	defer conn.Delete("/locks2", 0)
 
-	lock1 := NewZkLock(conn, "/locks2/test2")
-	lock2 := NewZkLock(conn1, "/locks2/test2")
+	lock1, err := NewZkLock2(conn, "/locks2/test2")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	lock2, err := NewZkLock2(conn1, "/locks2/test2")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks2/test2", 0)
 	ch := make(chan int, 1)
 	go func() {
-		lock1.Lock(context.Background())
-		defer lock1.Release()
+		lockCtx, err := lock1.Lock(context.Background())
+		if err != nil {
+			t.Error("failed to acquire lock")
+			DumpBufferWriter(t, writer)
+			return
+		}
+
+		defer lock1.Unlock(lockCtx)
 		ch <- 1
 		time.Sleep(time.Second * 2)
 	}()
@@ -98,17 +124,17 @@ func TestZkLockWithCancelledByTimeout(t *testing.T) {
 		return
 	}
 
-	_, err = lock2.Lock(context.Background())
+	lockCtx, err := lock2.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with background context", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	lock2.Release()
+	lock2.Unlock(lockCtx)
 }
 
-func TestZkLockCancelled(t *testing.T) {
+func TestZkLock2Cancelled(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -129,19 +155,28 @@ func TestZkLockCancelled(t *testing.T) {
 
 	defer conn.Delete("/locks3", 0)
 
-	lock := NewZkLock(conn, "/locks3/test3")
+	lock, err := NewZkLock2(conn, "/locks3/test3")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks3/test3", 0)
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	cancelFunc()
-	_, err = lock.Lock(ctx)
+	lockCtx, err := lock.Lock(ctx)
 	if err != ErrLockCancelled {
 		t.Error("lock expected to be failed with ErrLockCancelled", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
+
+	lock.Unlock(lockCtx)
 }
 
-func TestZkLockWithContention(t *testing.T) {
+func TestZkLock2WithContention(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -170,20 +205,34 @@ func TestZkLockWithContention(t *testing.T) {
 
 	defer conn.Delete("/locks4", 0)
 
-	lock1 := NewZkLock(conn, "/locks4/test4")
-	lock2 := NewZkLock(conn1, "/locks4/test4")
+	lock1, err := NewZkLock2(conn, "/locks4/test4")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	lock2, err := NewZkLock2(conn1, "/locks4/test4")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("locks4/test4", 0)
+
 	counter := 0
 	ch := make(chan int32, 1)
-	proc := func(lock *ZkLock) {
+	proc := func(lock *ZkLock2) {
 		for i := 0; i < 100; i++ {
 			func() {
-				_, e1 := lock.Lock(context.Background())
+				lockCtx, e1 := lock.Lock(context.Background())
 				if e1 != nil {
 					t.Error("failed to lock with contention", e1)
 					DumpBufferWriter(t, writer)
 					return
 				}
-				defer lock.Release()
+				defer lock.Unlock(lockCtx)
 				counter++
 			}()
 		}
@@ -201,7 +250,7 @@ func TestZkLockWithContention(t *testing.T) {
 	}
 }
 
-func TestZkLockWithSameInstanceContention(t *testing.T) {
+func TestZkLock2WithSameInstanceContention(t *testing.T) {
 	writer := NewBufferWriter()
 	SetupLogger(LogLevelDebug, writer)
 
@@ -222,19 +271,26 @@ func TestZkLockWithSameInstanceContention(t *testing.T) {
 
 	defer conn.Delete("/locks5", 0)
 
-	lock := NewZkLock(conn, "/locks5/test5")
+	lock, err := NewZkLock2(conn, "/locks5/test5")
+	if err != nil {
+		t.Error("failed to create lock", err)
+		DumpBufferWriter(t, writer)
+		return
+	}
+
+	defer conn.Delete("/locks5/test5", 0)
 	counter := 0
 	ch := make(chan int32, 1)
-	proc := func(lock *ZkLock) {
+	proc := func(lock *ZkLock2) {
 		for i := 0; i < 100; i++ {
 			func() {
-				_, e1 := lock.Lock(context.Background())
+				lockCtx, e1 := lock.Lock(context.Background())
 				if e1 != nil {
 					t.Error("failed to lock with contention", e1)
 					DumpBufferWriter(t, writer)
 					return
 				}
-				defer lock.Release()
+				defer lock.Unlock(lockCtx)
 				counter++
 			}()
 		}
