@@ -28,7 +28,7 @@ type DistributedLocker interface {
 type DistributedSharedLocker interface {
 	RLock(ctx context.Context) (LockContext, error)
 	RUnlock(lockCtx LockContext)
-	Lock(ctx context.Context) (LockContext error)
+	Lock(ctx context.Context) (LockContext, error)
 	Unlock(lockCtx LockContext)
 }
 
