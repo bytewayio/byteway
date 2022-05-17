@@ -312,7 +312,7 @@ func TestFindLeastSeqAndPrevNode(t *testing.T) {
 	nodes := []string{"node-0000000000", "node-0000000005"}
 
 	// no prevNode
-	seq, node, err := findLeastSeqAndPrevNode(nodes, "node-", 0)
+	seq, node, err := findLeastSeqAndPrevNode(nodes, "node-", "", 0)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -329,7 +329,7 @@ func TestFindLeastSeqAndPrevNode(t *testing.T) {
 	}
 
 	// prevNode is the first node
-	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", 5)
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", "", 5)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -347,7 +347,7 @@ func TestFindLeastSeqAndPrevNode(t *testing.T) {
 
 	// prevNode in the middle
 	nodes = []string{"node-0000000000", "node-0000000005", "node-0000000006"}
-	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", 6)
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", "", 6)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -366,7 +366,7 @@ func TestFindLeastSeqAndPrevNode(t *testing.T) {
 
 func TestFindLeastSeqAndPrevNodeWithOverflow(t *testing.T) {
 	nodes := []string{"node-2147483643", "node-2147483645", "node--2147483647", "node--2147483646"}
-	seq, node, err := findLeastSeqAndPrevNode(nodes, "node-", 2147483643)
+	seq, node, err := findLeastSeqAndPrevNode(nodes, "node-", "", 2147483643)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -383,7 +383,7 @@ func TestFindLeastSeqAndPrevNodeWithOverflow(t *testing.T) {
 	}
 
 	nodes = []string{"node-2147483643", "node-2147483645", "node--2147483647", "node--2147483646"}
-	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", -2147483647)
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", "", -2147483647)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -400,7 +400,7 @@ func TestFindLeastSeqAndPrevNodeWithOverflow(t *testing.T) {
 	}
 
 	nodes = []string{"node-2147483643", "node-2147483645", "node--2147483647", "node--2147483646"}
-	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", -2147483646)
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", "", -2147483646)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -417,7 +417,7 @@ func TestFindLeastSeqAndPrevNodeWithOverflow(t *testing.T) {
 	}
 
 	nodes = []string{"node-2147483643", "node-2147483645", "node--2147483647", "node--2147483646"}
-	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", 2147483645)
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "node-", "", 2147483645)
 	if err != nil {
 		t.Error("unexpected error", err)
 		return
@@ -430,6 +430,251 @@ func TestFindLeastSeqAndPrevNodeWithOverflow(t *testing.T) {
 
 	if node != nodes[0] {
 		t.Error(nodes[0]+" is expected, but found", node)
+		return
+	}
+}
+
+func TestFindLeastSeqAndPrevNodeWithMultiPrefixesAndOverflow(t *testing.T) {
+	nodes := []string{"read-2147483643", "read-2147483645", "write--2147483647", "read--2147483646"}
+	seq, node, err := findLeastSeqAndPrevNode(nodes, "read-", "write-", 2147483643)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"read-2147483643", "read-2147483645", "write--2147483647", "read--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "read-", "write-", -2147483647)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[1] {
+		t.Error(nodes[1]+" is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"read-2147483643", "read-2147483645", "write--2147483647", "read--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "read-", "write-", -2147483646)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[2] {
+		t.Error(nodes[2]+" is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"read-2147483643", "read-2147483645", "write--2147483647", "read--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "read-", "write-", 2147483645)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[0] {
+		t.Error(nodes[0]+" is expected, but found", node)
+		return
+	}
+}
+
+func TestFindLeastSeqAndPrevNodeForRWLock(t *testing.T) {
+	nodes := []string{"reader-0000000000", "reader-0000000005"}
+
+	// no prevNode
+	seq, node, err := findLeastSeqAndPrevNode(nodes, "writer-", "", 0)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 0 {
+		t.Error("0 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty expected, but found", node)
+		return
+	}
+
+	// prevNode is the first node
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "", 5)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 5 {
+		t.Error("5 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty expected, but found", node)
+		return
+	}
+
+	// prevNode in the middle
+	nodes = []string{"reader-0000000000", "writer-0000000005", "reader-0000000006"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "", 6)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 5 {
+		t.Error("0 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[1] {
+		t.Error(nodes[1]+" expected, but found", node)
+		return
+	}
+
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "", 0)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 0 {
+		t.Error("0 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty expected, but found", node)
+		return
+	}
+}
+
+func TestFindLeastSeqAndPrevNodeForRWLockWithOverflow(t *testing.T) {
+	nodes := []string{"reader-2147483643", "reader-2147483645", "writer--2147483647", "writer--2147483646"}
+	seq, node, err := findLeastSeqAndPrevNode(nodes, "writer-", "", 2147483643)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"reader-2147483643", "reader-2147483645", "writer--2147483647", "writer--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "reader-", "writer-", -2147483647)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[1] {
+		t.Error(nodes[1]+" is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"reader-2147483643", "writer-2147483645", "reader--2147483647", "writer--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "reader-", "writer-", -2147483646)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[2] {
+		t.Error(nodes[2]+" is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"writer-2147483643", "writer-2147483645", "reader--2147483647", "reader--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "", -2147483646)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[1] {
+		t.Error(nodes[1]+" is expected, but found", node)
+		return
+	}
+
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "reader-", 2147483643)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483643 {
+		t.Error("2147483643 expected, but found", seq)
+		return
+	}
+
+	if len(node) != 0 {
+		t.Error("empty is expected, but found", node)
+		return
+	}
+
+	nodes = []string{"reader-2147483643", "writer-2147483645", "reader--2147483647", "reader--2147483646"}
+	seq, node, err = findLeastSeqAndPrevNode(nodes, "writer-", "", -2147483646)
+	if err != nil {
+		t.Error("unexpected error", err)
+		return
+	}
+
+	if seq != 2147483645 {
+		t.Error("2147483645 expected, but found", seq)
+		return
+	}
+
+	if node != nodes[1] {
+		t.Error(nodes[1]+" is expected, but found", node)
 		return
 	}
 }
