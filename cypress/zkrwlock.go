@@ -49,7 +49,7 @@ func NewZkRWLock(conn *zk.Conn, path string) (*ZkRWLock, error) {
 }
 
 // RLock try to acquire reader lock
-func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
+func (rwLock *ZkRWLock) RLock(ctx context.Context) (LockContext, error) {
 	rwLock.localLock.RLock()
 	releaseLocalLock := false
 	cleanupReaderNode := false
@@ -70,7 +70,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 
 	if rwLock.readerLockAcquired {
 		atomic.AddInt32(&rwLock.readers, 1)
-		return nil
+		return nil, nil
 	}
 
 	var cancelled int32
@@ -96,7 +96,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 				zap.L().Error("trying to acquire reader lock while it's acquired", zap.String("node", rwLock.readerPath), zap.String("trace", GetTraceID(ctx)), zap.Error(err))
 			}
 
-			return err
+			return nil, err
 		}
 
 		// Need to cleanup reader node in case of failure
@@ -107,7 +107,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 		if err != nil {
 			releaseLocalLock = true
 			zap.L().Error("failed to check writer node", zap.String("node", rwLock.writerPath), zap.String("trace", GetTraceID(ctx)), zap.Error(err))
-			return err
+			return nil, err
 		}
 
 		// Node does not exist, reader lock acquired
@@ -115,7 +115,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 			rwLock.readerLockAcquired = true
 			cleanupReaderNode = false
 			atomic.AddInt32(&rwLock.readers, 1)
-			return nil
+			return nil, nil
 		}
 
 		// Node exists
@@ -124,7 +124,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 		if err != nil {
 			releaseLocalLock = true
 			zap.L().Fatal("!!!failed to release reader node, writers will be hungry", zap.String("node", rwLock.readerPath), zap.Error(err), zap.String("trace", GetTraceID(ctx)))
-			return err
+			return nil, err
 		}
 
 		// Reader node has already deleted, no need to cleanup
@@ -135,7 +135,7 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 			if event.Type != zk.EventNodeDeleted {
 				releaseLocalLock = true
 				zap.L().Error("unexpected reader watch event", zap.Int32("event", int32(event.Type)), zap.String("reader", rwLock.readerPath), zap.String("trace", GetTraceID(ctx)))
-				return ErrLockFailed
+				return nil, ErrLockFailed
 			}
 		case <-cancelChannel:
 		}
@@ -143,11 +143,11 @@ func (rwLock *ZkRWLock) RLock(ctx context.Context) error {
 
 	// Lock cancelled
 	releaseLocalLock = true
-	return ErrLockCancelled
+	return nil, ErrLockCancelled
 }
 
 // RUnlock release reader lock that is acquired
-func (rwLock *ZkRWLock) RUnlock() {
+func (rwLock *ZkRWLock) RUnlock(lockCtx LockContext) {
 	// release local lock
 	rwLock.localLock.RUnlock()
 
@@ -164,7 +164,7 @@ func (rwLock *ZkRWLock) RUnlock() {
 }
 
 // Lock acquires writer lock
-func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
+func (rwLock *ZkRWLock) Lock(ctx context.Context) (LockContext, error) {
 	rwLock.localLock.Lock()
 	releaseLocalLock := false
 	cleanupWriterNode := false
@@ -204,7 +204,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 		if err != nil {
 			releaseLocalLock = true
 			zap.L().Error("failed to check writer node exists", zap.String("node", rwLock.writerPath), zap.Error(err), zap.String("trace", GetTraceID(ctx)))
-			return err
+			return nil, err
 		}
 
 		if exists {
@@ -213,12 +213,12 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 				if event.Type != zk.EventNodeDeleted {
 					releaseLocalLock = true
 					zap.L().Error("unexpected node event", zap.String("node", rwLock.writerPath), zap.Int32("event", int32(event.Type)), zap.String("trace", GetTraceID(ctx)))
-					return ErrLockFailed
+					return nil, ErrLockFailed
 				}
 				break
 			case <-cancelChannel:
 				releaseLocalLock = true
-				return ErrLockCancelled
+				return nil, ErrLockCancelled
 			}
 		}
 
@@ -231,7 +231,7 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 		if err != nil {
 			releaseLocalLock = true
 			zap.L().Error("failed to create writer node", zap.String("node", rwLock.writerPath), zap.Error(err), zap.String("trace", GetTraceID(ctx)))
-			return err
+			return nil, err
 		}
 
 		// Need to cleanup writer node in case of failure
@@ -244,14 +244,14 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 			if err != nil {
 				releaseLocalLock = true
 				zap.L().Error("failed to check readers", zap.String("node", rwLock.path+readersParentNode), zap.Error(err), zap.String("trace", GetTraceID(ctx)))
-				return err
+				return nil, err
 			}
 
 			if len(readers) == 0 {
 				// lock acquired
 				cleanupWriterNode = false
 				rwLock.writerLockAcquired = true
-				return nil
+				return nil, nil
 			}
 
 			select {
@@ -261,18 +261,18 @@ func (rwLock *ZkRWLock) Lock(ctx context.Context) error {
 				}
 			case <-cancelChannel:
 				releaseLocalLock = true
-				return ErrLockCancelled
+				return nil, ErrLockCancelled
 			}
 		}
 	}
 
 	// Lock cancelled
 	releaseLocalLock = true
-	return ErrLockCancelled
+	return nil, ErrLockCancelled
 }
 
 // Unlock release writer lock
-func (rwLock *ZkRWLock) Unlock() {
+func (rwLock *ZkRWLock) Unlock(lockCtx LockContext) {
 	rwLock.localLock.Unlock()
 	rwLock.lock.Lock()
 	defer rwLock.lock.Unlock()
