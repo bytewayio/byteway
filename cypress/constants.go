@@ -33,4 +33,8 @@ const (
 
 	// EntityTagsPrefix prefix tag
 	EntityTagsPrefix = "prefix"
+
+	PagingNext = "next"
+	PagingPrev = "prev"
+	PagingNone = "none"
 )
