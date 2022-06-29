@@ -5,6 +5,18 @@ type Comparer[T any] interface {
 	Compare(lh T, rh T) int
 }
 
+func OrderedCompare[T Ordered](lh T, rh T) int {
+	if lh > rh {
+		return 1
+	}
+
+	if lh == rh {
+		return 0
+	}
+
+	return -1
+}
+
 // CompareFunc function implements Comparer
 type CompareFunc[T any] func(T, T) int
 
@@ -51,7 +63,7 @@ func (m *PageMerger[T]) Merge(lists ...[]T) []T {
 			idx := -1
 			for i, l := range emulators {
 				if (status[i] & 1) != 0 {
-					if indexes[i] >= len(l) {
+					if indexes[i]+1 >= len(l) {
 						status[i] = 2 // reach eof
 					} else {
 						indexes[i]++

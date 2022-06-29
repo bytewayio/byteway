@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +60,12 @@ const (
 		key2 varchar(40) not null,
 		value varchar(100) not null,
 		primary key (key1, key2)
+	) engine=InnoDB;
+	create table log_entry (
+		id bigint not null primary key,
+		msg varchar(100) not null,
+		ts bigint not null default 0,
+		key(ts)
 	) engine=InnoDB;`
 )
 
@@ -780,6 +788,99 @@ func TestUnknownStateClusterTxnResolution(t *testing.T) {
 		if b2.(*balance).Amount != 1200 {
 			t.Error("expected b1 balance 1200 but got", b2.(*balance).Amount)
 			return nil
+		}
+
+		return nil
+	})
+}
+
+type logEntry struct {
+	ID        int64  `col:"id" dtags:"key"`
+	Msg       string `col:"msg" dtags:"partition"`
+	Timestamp int64  `col:"ts"`
+}
+
+func TestPageQuery(t *testing.T) {
+	runClusterTest(t, func(cluster *MyCluster) error {
+		rand.Seed(GetEpochMillis())
+		for i := 0; i < 100; i += 1 {
+			entry := &logEntry{Msg: "msg" + strconv.Itoa(i), Timestamp: GetEpochMillis() + rand.Int63n(100)}
+			if err := cluster.Insert(context.Background(), entry); err != nil {
+				return err
+			}
+		}
+
+		query := &PageQuery[logEntry, int64, int64]{
+			Cluster:                     cluster,
+			CountingQueryText:           "select count(*) from log_entry",
+			CountingQueryArgsConfigurer: func() []interface{} { return []interface{}{} },
+			QuerySetup: func(sql *strings.Builder) ([]interface{}, bool) {
+				sql.WriteString("select * from log_entry")
+				return []interface{}{}, false
+			},
+			PrimaryKeyName:   "ts",
+			SecondaryKeyName: "id",
+			PrimaryKeyParser: func(value string) (int64, bool) {
+				if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+					return v, true
+				}
+
+				return 0, false
+			},
+			SecondaryKeyParser: func(value string) (int64, bool) {
+				if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+					return v, true
+				}
+
+				return 0, false
+			},
+			PrimaryKeyGetter:     func(t *logEntry) int64 { return t.Timestamp },
+			SecondaryKeyGetter:   func(t *logEntry) int64 { return t.ID },
+			PrimaryKeyComparer:   CompareFunc[int64](OrderedCompare[int64]),
+			SecondaryKeyComparer: CompareFunc[int64](OrderedCompare[int64]),
+		}
+
+		page, err := query.DoQuery(context.Background(), "", "", 20)
+		if err != nil {
+			return err
+		}
+
+		if page.TotalPages != 5 {
+			t.Error("Expected total pages", 5, "but found", page.TotalPages)
+			return nil
+		}
+
+		if len(page.Records) != 20 {
+			t.Error("Expected 20 records but got", len(page.Records))
+			return nil
+		}
+
+		firstItem := page.Records[0]
+
+		page, err = query.DoQuery(context.Background(), PagingNext, page.PageToken, 20)
+		if page.Page != 2 {
+			t.Error("Expected page is 2 but got", page.Page)
+			return nil
+		}
+
+		if len(page.Records) != 20 {
+			t.Error("Expected 20 records but got", len(page.Records))
+			return nil
+		}
+
+		page, err = query.DoQuery(context.Background(), PagingPrev, page.PageToken, 20)
+		if page.Page != 1 {
+			t.Error("Expected page is 1 but got", page.Page)
+			return nil
+		}
+
+		if len(page.Records) != 20 {
+			t.Error("Expected 20 records but got", len(page.Records))
+			return nil
+		}
+
+		if firstItem.ID != page.Records[0].ID {
+			t.Error("Failed to turn back to the first page")
 		}
 
 		return nil
