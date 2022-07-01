@@ -11,11 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	keysSeparator     string = ","
-	keyRangeSeparator string = "-"
-)
-
 type PageQuery[T any, TPrimaryKey any, TSecondaryKey any] struct {
 	Cluster                     *MyCluster
 	CountingQueryText           string
@@ -47,23 +42,27 @@ type Stringify interface {
 type pageKey[TPrimaryKey any, TSecondaryKey any] struct {
 	primaryKey   TPrimaryKey
 	secondaryKey TSecondaryKey
+	keySeparator string
 }
 
 type keyRange[TPrimaryKey any, TSecondaryKey any] struct {
-	lowerBound *pageKey[TPrimaryKey, TSecondaryKey]
-	upperBound *pageKey[TPrimaryKey, TSecondaryKey]
+	lowerBound     *pageKey[TPrimaryKey, TSecondaryKey]
+	upperBound     *pageKey[TPrimaryKey, TSecondaryKey]
+	rangeSeparator string
 }
 
 type pageToken[TPrimaryKey any, TSecondaryKey any] struct {
-	page     int
-	keyRange *keyRange[TPrimaryKey, TSecondaryKey]
+	page           int
+	keyRange       *keyRange[TPrimaryKey, TSecondaryKey]
+	rangeSeparator string
 }
 
 func tryParsePageKey[TPrimaryKey any, TSecondaryKey any](
 	encodedString string,
+	keySeparator string,
 	primaryKeyParser func(value string) (TPrimaryKey, bool),
 	secondaryKeyParser func(value string) (TSecondaryKey, bool)) (*pageKey[TPrimaryKey, TSecondaryKey], bool) {
-	values := strings.Split(encodedString, keysSeparator)
+	values := strings.Split(encodedString, keySeparator)
 	if len(values) != 2 {
 		return nil, false
 	}
@@ -78,36 +77,36 @@ func tryParsePageKey[TPrimaryKey any, TSecondaryKey any](
 		return nil, false
 	}
 
-	return &pageKey[TPrimaryKey, TSecondaryKey]{primaryKey: primaryKey, secondaryKey: secondaryKey}, true
+	return &pageKey[TPrimaryKey, TSecondaryKey]{primaryKey: primaryKey, secondaryKey: secondaryKey, keySeparator: keySeparator}, true
 }
 
 func tryParseKeyRange[TPrimaryKey any, TSecondaryKey any](
-	encodedString string,
+	encodedString, rangeSeparator, keySeparator string,
 	primaryKeyParser func(value string) (TPrimaryKey, bool),
 	secondaryKeyParser func(value string) (TSecondaryKey, bool)) (*keyRange[TPrimaryKey, TSecondaryKey], bool) {
-	values := strings.Split(encodedString, keyRangeSeparator)
+	values := strings.Split(encodedString, rangeSeparator)
 	if len(values) != 2 {
 		return nil, false
 	}
 
-	lowerBound, ok := tryParsePageKey(values[0], primaryKeyParser, secondaryKeyParser)
+	lowerBound, ok := tryParsePageKey(values[0], keySeparator, primaryKeyParser, secondaryKeyParser)
 	if !ok {
 		return nil, false
 	}
 
-	upperBound, ok := tryParsePageKey(values[1], primaryKeyParser, secondaryKeyParser)
+	upperBound, ok := tryParsePageKey(values[1], keySeparator, primaryKeyParser, secondaryKeyParser)
 	if !ok {
 		return nil, false
 	}
 
-	return &keyRange[TPrimaryKey, TSecondaryKey]{lowerBound, upperBound}, true
+	return &keyRange[TPrimaryKey, TSecondaryKey]{lowerBound, upperBound, rangeSeparator}, true
 }
 
 func tryParsePageToken[TPrimaryKey any, TSecondaryKey any](
-	encodedString string,
+	encodedString, rangeSeparator, keySeparator string,
 	primaryKeyParser func(value string) (TPrimaryKey, bool),
 	secondaryKeyParser func(value string) (TSecondaryKey, bool)) (*pageToken[TPrimaryKey, TSecondaryKey], bool) {
-	pos := strings.Index(encodedString, keyRangeSeparator)
+	pos := strings.Index(encodedString, rangeSeparator)
 	if pos <= 0 {
 		return nil, false
 	}
@@ -120,14 +119,15 @@ func tryParsePageToken[TPrimaryKey any, TSecondaryKey any](
 	}
 
 	rangeValue := encodedString[pos+1:]
-	keyRange, ok := tryParseKeyRange(rangeValue, primaryKeyParser, secondaryKeyParser)
+	keyRange, ok := tryParseKeyRange(rangeValue, rangeSeparator, keySeparator, primaryKeyParser, secondaryKeyParser)
 	if !ok {
 		return nil, false
 	}
 
 	return &pageToken[TPrimaryKey, TSecondaryKey]{
-		page:     int(page),
-		keyRange: keyRange,
+		page:           int(page),
+		keyRange:       keyRange,
+		rangeSeparator: rangeSeparator,
 	}, true
 }
 
@@ -228,24 +228,28 @@ func keyValueAsString(value interface{}) string {
 }
 
 func (k *pageKey[TPrimaryKey, TSecondaryKey]) AsString() string {
-	return keyValueAsString(k.primaryKey) + "," + keyValueAsString(k.secondaryKey)
+	return keyValueAsString(k.primaryKey) + k.keySeparator + keyValueAsString(k.secondaryKey)
 }
 
 func (r *keyRange[TPrimaryKey, TSecondaryKey]) AsString() string {
-	return r.lowerBound.AsString() + keyRangeSeparator + r.upperBound.AsString()
+	return r.lowerBound.AsString() + r.rangeSeparator + r.upperBound.AsString()
 }
 
 func (t *pageToken[TPrimaryKey, TSecondaryKey]) AsString() string {
-	return strconv.Itoa(t.page) + keyRangeSeparator + t.keyRange.AsString()
+	return strconv.Itoa(t.page) + t.rangeSeparator + t.keyRange.AsString()
 }
 
-func (q *PageQuery[T, TPrimaryKey, TSecondaryKey]) DoQuery(ctx context.Context, paging, pagingToken string, pageSize int) (*DataPage[*T], error) {
+func (q *PageQuery[T, TPrimaryKey, TSecondaryKey]) DoQuery(ctx context.Context, paging, pageToken string, pageSize int) (*DataPage[*T], error) {
+	return q.DoQueryWithCustomPageToken(ctx, paging, pageToken, pageSize, ",", "-")
+}
+
+func (q *PageQuery[T, TPrimaryKey, TSecondaryKey]) DoQueryWithCustomPageToken(ctx context.Context, paging, pagingToken string, pageSize int, rangeSeparator, keySeparator string) (*DataPage[*T], error) {
 	doPaging := paging
 	if doPaging != PagingNext && doPaging != PagingPrev {
 		doPaging = PagingNone
 	}
 
-	token, isValid := tryParsePageToken(pagingToken, q.PrimaryKeyParser, q.SecondaryKeyParser)
+	token, isValid := tryParsePageToken(pagingToken, rangeSeparator, keySeparator, q.PrimaryKeyParser, q.SecondaryKeyParser)
 	if !isValid {
 		doPaging = PagingNone
 		token = &pageToken[TPrimaryKey, TSecondaryKey]{}
@@ -397,16 +401,20 @@ func (q *PageQuery[T, TPrimaryKey, TSecondaryKey]) DoQuery(ctx context.Context, 
 		lowerBound: &pageKey[TPrimaryKey, TSecondaryKey]{
 			primaryKey:   q.PrimaryKeyGetter(first),
 			secondaryKey: q.SecondaryKeyGetter(first),
+			keySeparator: keySeparator,
 		},
 		upperBound: &pageKey[TPrimaryKey, TSecondaryKey]{
 			primaryKey:   q.PrimaryKeyGetter(last),
 			secondaryKey: q.SecondaryKeyGetter(last),
+			keySeparator: keySeparator,
 		},
+		rangeSeparator: rangeSeparator,
 	}
 
 	newToken := &pageToken[TPrimaryKey, TSecondaryKey]{
-		page:     currentPage,
-		keyRange: newRange,
+		page:           currentPage,
+		keyRange:       newRange,
+		rangeSeparator: rangeSeparator,
 	}
 
 	return &DataPage[*T]{

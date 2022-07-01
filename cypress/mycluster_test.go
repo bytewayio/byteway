@@ -840,7 +840,7 @@ func TestPageQuery(t *testing.T) {
 			SecondaryKeyComparer: CompareFunc[int64](OrderedCompare[int64]),
 		}
 
-		page, err := query.DoQuery(context.Background(), "", "", 20)
+		page, err := query.DoQueryWithCustomPageToken(context.Background(), "", "", 20, "/", "$")
 		if err != nil {
 			return err
 		}
@@ -857,7 +857,7 @@ func TestPageQuery(t *testing.T) {
 
 		firstItem := page.Records[0]
 
-		page, err = query.DoQuery(context.Background(), PagingNext, page.PageToken, 20)
+		page, err = query.DoQueryWithCustomPageToken(context.Background(), PagingNext, page.PageToken, 20, "/", "$")
 		if page.Page != 2 {
 			t.Error("Expected page is 2 but got", page.Page)
 			return nil
@@ -868,7 +868,17 @@ func TestPageQuery(t *testing.T) {
 			return nil
 		}
 
-		page, err = query.DoQuery(context.Background(), PagingPrev, page.PageToken, 20)
+		if strings.Index(page.PageToken, "/") <= 0 {
+			t.Error("page token must have symbol /", page.PageToken)
+			return nil
+		}
+
+		if strings.Index(page.PageToken, "$") <= 0 {
+			t.Error("page token must have symbol $", page.PageToken)
+			return nil
+		}
+
+		page, err = query.DoQueryWithCustomPageToken(context.Background(), PagingPrev, page.PageToken, 20, "/", "$")
 		if page.Page != 1 {
 			t.Error("Expected page is 1 but got", page.Page)
 			return nil
