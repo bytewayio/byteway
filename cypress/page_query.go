@@ -356,16 +356,14 @@ func (q *PageQuery[T, TPrimaryKey, TSecondaryKey]) DoQueryWithCustomPageToken(ct
 		return nil, err
 	}
 
-	currentPage := token.page + 1
+	currentPage := 0
 	if doPaging == PagingPrev {
-		if token.page-1 > 0 {
-			currentPage = token.page - 1
-		} else {
-			currentPage = 1
-		}
-	} else if doPaging == PagingPrev {
+		currentPage = Max(1, token.page-1)
+	} else if doPaging == PagingNext {
+		currentPage = Max(1, token.page+1)
+	} else {
 		if isValid {
-			currentPage = token.page
+			currentPage = Max(1, token.page)
 		} else {
 			currentPage = 1
 		}

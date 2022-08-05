@@ -3,7 +3,6 @@ package cypress
 import (
 	"context"
 	"database/sql"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -57,7 +56,7 @@ func TestEntityDescriptor(t *testing.T) {
 }
 
 func TestEntityDescriptorWithQueries(t *testing.T) {
-	testDbFile, err := ioutil.TempFile(os.TempDir(), "entitytst")
+	testDbFile, err := os.CreateTemp(os.TempDir(), "entitytst*")
 	if err != nil {
 		t.Error("failed to create test db file", err)
 		return
@@ -165,7 +164,7 @@ func TestEntityDescriptorWithQueries(t *testing.T) {
 }
 
 func TestDbAccessor(t *testing.T) {
-	testDbFile, err := ioutil.TempFile(os.TempDir(), "dbaccessortst")
+	testDbFile, err := os.CreateTemp(os.TempDir(), "dbaccessortst*")
 	if err != nil {
 		t.Error("failed to create test db file", err)
 		return
@@ -234,7 +233,7 @@ func TestDbAccessor(t *testing.T) {
 }
 
 func TestDbAccessorTxn(t *testing.T) {
-	testDbFile, err := ioutil.TempFile(os.TempDir(), "dbtxntst")
+	testDbFile, err := os.CreateTemp(os.TempDir(), "dbtxntst*")
 	if err != nil {
 		t.Error("failed to create test db file", err)
 		return

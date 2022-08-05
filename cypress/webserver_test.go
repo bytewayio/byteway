@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -195,7 +195,7 @@ func DumpBufferWriter(t *testing.T, writer *BufferedWriter) {
 func TestWebServer(t *testing.T) {
 	// test setup
 	// create test folder
-	testDir, err := ioutil.TempDir("", "cytpltest")
+	testDir, err := os.MkdirTemp("", "cytpltest*")
 	if err != nil {
 		t.Error("failed to create test dir", err)
 		return
@@ -204,13 +204,13 @@ func TestWebServer(t *testing.T) {
 	defer os.RemoveAll(testDir)
 
 	// write template files
-	err = ioutil.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup header.tmpl")
 		return
 	}
 
-	err = ioutil.WriteFile(path.Join(testDir, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{add 1 1}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{add 1 1}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup index.tmpl")
 		return
@@ -271,7 +271,7 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		resp.Body.Close()
 		t.Error("failed to read body", err)
@@ -383,7 +383,7 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		resp.Body.Close()
 		t.Error("failed to read body", err)
@@ -427,7 +427,7 @@ func TestWebServer(t *testing.T) {
 	}
 
 	defer resp.Body.Close()
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error("failed to read body")
 		DumpBufferWriter(t, writer)

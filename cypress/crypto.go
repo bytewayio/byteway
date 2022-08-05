@@ -11,7 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -137,7 +137,7 @@ func DecodeRsaPrivateKey(payload []byte) (*rsa.PrivateKey, error) {
 
 // LoadRsaPrivateKey load rsa private key from pem file
 func LoadRsaPrivateKey(pemFile string) (*rsa.PrivateKey, error) {
-	fileContent, err := ioutil.ReadFile(pemFile)
+	fileContent, err := os.ReadFile(pemFile)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func DecodeRsaPublicKey(payload []byte) (*rsa.PublicKey, error) {
 
 // LoadRsaPublicKey load rsa public key from pem file
 func LoadRsaPublicKey(pemFile string) (*rsa.PublicKey, error) {
-	fileContent, err := ioutil.ReadFile(pemFile)
+	fileContent, err := os.ReadFile(pemFile)
 	if err != nil {
 		return nil, err
 	}

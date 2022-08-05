@@ -25,3 +25,19 @@ func GetEpochMillis() int64 {
 func ConvertToEpochMillis(t time.Time) int64 {
 	return t.UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
 }
+
+func Max[T Ordered](v1, v2 T) T {
+	if v1 > v2 {
+		return v1
+	}
+
+	return v2
+}
+
+func Min[T Ordered](v1, v2 T) T {
+	if v1 < v2 {
+		return v1
+	}
+
+	return v2
+}

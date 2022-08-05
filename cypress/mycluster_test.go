@@ -486,6 +486,11 @@ func TestClusterTxnWithSuccess(t *testing.T) {
 
 		collectorCreator := NewSliceCollectorCreator[balance]()
 		err = cluster.GetAllWithCollector(context.Background(), reflect.TypeOf((*balance)(nil)), "select * from `balance`", collectorCreator)
+		if err != nil {
+			t.Error("failed to query from cluster", err.Error())
+			return nil
+		}
+
 		if len(collectorCreator.Collectors) != 2 {
 			t.Error("unexpected number of partitions", len(collectorCreator.Collectors))
 			return nil
@@ -858,6 +863,11 @@ func TestPageQuery(t *testing.T) {
 		firstItem := page.Records[0]
 
 		page, err = query.DoQueryWithCustomPageToken(context.Background(), PagingNext, page.PageToken, 20, "/", "$")
+		if err != nil {
+			t.Error("failed to do query", err.Error())
+			return nil
+		}
+
 		if page.Page != 2 {
 			t.Error("Expected page is 2 but got", page.Page)
 			return nil
@@ -879,6 +889,11 @@ func TestPageQuery(t *testing.T) {
 		}
 
 		page, err = query.DoQueryWithCustomPageToken(context.Background(), PagingPrev, page.PageToken, 20, "/", "$")
+		if err != nil {
+			t.Error("failed to do query", err.Error())
+			return nil
+		}
+
 		if page.Page != 1 {
 			t.Error("Expected page is 1 but got", page.Page)
 			return nil

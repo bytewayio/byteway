@@ -2,7 +2,6 @@ package cypress
 
 import (
 	"html/template"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -27,7 +26,7 @@ func readBuffer(buf [][]byte) string {
 func TestTemplateManager(t *testing.T) {
 	// test setup
 	// create test folder
-	testDir, err := ioutil.TempDir("", "cytpltest")
+	testDir, err := os.MkdirTemp("", "cytpltest*")
 	if err != nil {
 		t.Error("failed to create test dir", err)
 		return
@@ -40,19 +39,19 @@ func TestTemplateManager(t *testing.T) {
 	defer os.RemoveAll(testDir)
 
 	// write template files
-	err = ioutil.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup header.tmpl")
 		return
 	}
 
-	err = ioutil.WriteFile(path.Join(testDir, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{add 1 1}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{add 1 1}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup index.tmpl")
 		return
 	}
 
-	err = ioutil.WriteFile(path.Join(testDir, "index1.tmpl"), []byte("{{define \"index1\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "index1.tmpl"), []byte("{{define \"index1\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup index1.tmpl")
 		return
@@ -110,7 +109,7 @@ func TestTemplateManager(t *testing.T) {
 	// test reload
 	// don't change too quick
 	time.Sleep(time.Millisecond * 50)
-	err = ioutil.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}updated{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir, "header.tmpl"), []byte("{{define \"header\"}}{{.}}updated{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to update header.tmpl")
 		return
@@ -140,7 +139,7 @@ func TestTemplateManager(t *testing.T) {
 func TestSkinManager(t *testing.T) {
 	// test setup
 	// create test folder
-	testDir1, err := ioutil.TempDir("", "cytpltest")
+	testDir1, err := os.MkdirTemp("", "cytpltest*")
 	if err != nil {
 		t.Error("failed to create test dir", err)
 		return
@@ -153,13 +152,13 @@ func TestSkinManager(t *testing.T) {
 	}
 
 	// write template files
-	err = ioutil.WriteFile(path.Join(testDir1, "header.tmpl"), []byte("{{define \"header\"}}defaultskin{{.}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir1, "header.tmpl"), []byte("{{define \"header\"}}defaultskin{{.}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup header.tmpl")
 		return
 	}
 
-	err = ioutil.WriteFile(path.Join(testDir1, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir1, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup index.tmpl")
 		return
@@ -172,7 +171,7 @@ func TestSkinManager(t *testing.T) {
 
 	// second skin
 	// create test folder
-	testDir2, err := ioutil.TempDir("", "cytpltest")
+	testDir2, err := os.MkdirTemp("", "cytpltest*")
 	if err != nil {
 		t.Error("failed to create test dir", err)
 		return
@@ -181,13 +180,13 @@ func TestSkinManager(t *testing.T) {
 	defer os.RemoveAll(testDir2)
 
 	// write template files
-	err = ioutil.WriteFile(path.Join(testDir2, "header.tmpl"), []byte("{{define \"header\"}}skin1{{.}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir2, "header.tmpl"), []byte("{{define \"header\"}}skin1{{.}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup header.tmpl")
 		return
 	}
 
-	err = ioutil.WriteFile(path.Join(testDir2, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
+	err = os.WriteFile(path.Join(testDir2, "index.tmpl"), []byte("{{define \"index\"}}{{template \"header\" .Title}}{{.Message}}{{end}}"), os.ModePerm)
 	if err != nil {
 		t.Error("failed to setup index.tmpl")
 		return

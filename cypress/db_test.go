@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -19,7 +18,7 @@ type member struct {
 }
 
 func TestDbUsage(t *testing.T) {
-	testDbFile, err := ioutil.TempFile(os.TempDir(), "cytest")
+	testDbFile, err := os.CreateTemp(os.TempDir(), "cytest*")
 	if err != nil {
 		t.Error("failed to create test db file", err)
 		return

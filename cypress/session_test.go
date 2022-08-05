@@ -2,7 +2,6 @@ package cypress
 
 import (
 	"encoding/gob"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -42,7 +41,7 @@ func TestFileSessionStore(t *testing.T) {
 	testSessionStore(sessionStore, t)
 
 	// clean up
-	files, err := ioutil.ReadDir(testDir)
+	files, err := os.ReadDir(testDir)
 	if err != nil {
 		t.Error("failed to list test folder")
 		return

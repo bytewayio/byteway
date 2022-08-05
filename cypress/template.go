@@ -3,7 +3,6 @@ package cypress
 import (
 	"errors"
 	"html/template"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -85,7 +84,7 @@ func NewTemplateManager(dir, suffix string, refreshInterval time.Duration, confi
 		}
 
 		zap.L().Info("scan for template files", zap.String("dir", current), zap.String("suffix", suffix))
-		files, err := ioutil.ReadDir(current)
+		files, err := os.ReadDir(current)
 		if err != nil {
 			zap.L().Error("failed to scan directory for template files", zap.String("dir", current), zap.Error(err))
 			continue
@@ -97,7 +96,13 @@ func NewTemplateManager(dir, suffix string, refreshInterval time.Duration, confi
 			} else if strings.HasSuffix(file.Name(), suffix) {
 				zap.L().Info("template file found", zap.String("file", file.Name()))
 				path := current + file.Name()
-				filesTime[path] = file.ModTime()
+				info, err := file.Info()
+				if err != nil {
+					zap.L().Error("failed to get file info", zap.String("name", file.Name()), zap.Error(err))
+					continue
+				}
+
+				filesTime[path] = info.ModTime()
 				if sharedDetector(path) {
 					sharedFiles = append(sharedFiles, path)
 				} else {

@@ -348,7 +348,7 @@ func (server *WebServer) WithLoginURL(loginURL string) *WebServer {
 	return server
 }
 
-//WithCustomHandler set or chains a handler to custom handlers chain, the new
+// WithCustomHandler set or chains a handler to custom handlers chain, the new
 // CustomHandler will be added to the tail of custom handlers chain.
 func (server *WebServer) WithCustomHandler(handler CustomHandler) *WebServer {
 	if server.customHandler == nil {

@@ -117,14 +117,14 @@ func TestZkRWLock2WithCancelledByTimeout(t *testing.T) {
 	<-ch
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
 	defer cancelFunc()
-	lockCtx, err := lock2.Lock(ctx)
+	_, err = lock2.Lock(ctx)
 	if err != ErrLockCancelled {
 		t.Error("lock expected to be failed with ErrLockCancelled", err)
 		DumpBufferWriter(t, writer)
 		return
 	}
 
-	lockCtx, err = lock2.Lock(context.Background())
+	lockCtx, err := lock2.Lock(context.Background())
 	if err != nil {
 		t.Error("failed to lock with background context", err)
 		DumpBufferWriter(t, writer)
