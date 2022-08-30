@@ -13,7 +13,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
-	go.uber.org/zap v1.21.0
+	go.uber.org/zap v1.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
@@ -25,8 +25,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	go.uber.org/atomic v1.9.0 // indirect
-	go.uber.org/multierr v1.8.0 // indirect
-	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	go.uber.org/atomic v1.10.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 )
