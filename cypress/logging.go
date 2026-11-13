@@ -61,6 +61,12 @@ func (w *traceableResponseWriter) WriteHeader(statusCode int) {
 	w.writer.WriteHeader(statusCode)
 }
 
+func (w *traceableResponseWriter) Flush() {
+	if f, ok := w.writer.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func (w *traceableResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	hijacker, ok := w.writer.(http.Hijacker)
 	if !ok {
